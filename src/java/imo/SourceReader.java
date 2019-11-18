@@ -581,7 +581,7 @@ public class SourceReader {
           case "backspace":
           case "formfeed":
           case "return":
-            return astNode(List.of(CHAR, token.charAt(0)));
+            return astNode(List.of(CHAR, token));
           default:
             throw new ReaderException("Unsupported character: \\" + token);
         }

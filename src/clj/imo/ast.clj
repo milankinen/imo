@@ -48,24 +48,15 @@
   (->> (map ast->source nodes)
        (apply str)))
 
-; private static Keyword PROGRAM = Keyword.intern("program");
-;  private static Keyword NEWLINE = Keyword.intern("newline");
-;  private static Keyword NIL = Keyword.intern("nil");
-;  private static Keyword WHITESPACE = Keyword.intern("space");
-;  private static Keyword NUMBER = Keyword.intern("number");
-;  private static Keyword BOOLEAN = Keyword.intern("boolean");
-;  private static Keyword STRING = Keyword.intern("string");
-;  private static Keyword CHAR = Keyword.intern("char");
-;  private static Keyword KEYWORD = Keyword.intern("keyword");
-;  private static Keyword SYMBOL = Keyword.intern("symbol");
-;  private static Keyword META = Keyword.intern("meta");
-
 (defmethod ast->source :*str* [ast] ast)
 
 (defmethod ast->source :*none* [_] "")
 
 (defmethod ast->source :program [[_ & children]]
   (s-join children))
+
+(defmethod ast->source :char [[_ char]]
+  (str \\ char))
 
 (defmethod ast->source :list [[_ & children]]
   (str "(" (s-join children) ")"))
