@@ -112,8 +112,8 @@
 (defmethod ast->source :regexp [[_ value]]
   value)
 
-(defmethod ast->source :comment [[_ & comment]]
-  (str "; " comment))
+(defmethod ast->source :comment [[_ comment]]
+  comment)
 
 (defmethod ast->source :nil [_]
   "nil")
