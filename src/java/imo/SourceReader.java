@@ -45,8 +45,9 @@ public class SourceReader {
   private static Keyword META_COL = Keyword.intern("col");
   private static Keyword META_PRE = Keyword.intern("pre");
   private static Keyword META_POST = Keyword.intern("post");
+  private static Keyword META_CHILDREN = Keyword.intern("children");
 
-  private static AstNode __END_NODE__ = new AstNode(-1, -1, Keyword.intern("**end**"), List.of());
+  private static Keyword __END__ = Keyword.intern("**coll_end**");
 
   private static Pattern SYM_PAT = Pattern.compile("[:]?([\\D&&[^/]].*/)?(/|[\\D&&[^/]][^/]*)");
   private static Pattern INT_PAT =
@@ -150,7 +151,7 @@ public class SourceReader {
       }
 
       if (!pendingEndChars.empty() && pendingEndChars.peek().equals(ch)) {
-        return __END_NODE__;
+        return createAstCodeNode(line, col, __END__, List.of());
       }
 
       FormReader macroReader = getMacro(ch);
@@ -626,15 +627,28 @@ public class SourceReader {
   }
 
   private AstNode readCollectionNode(Keyword type, char startChar, char endChar, int line, int col) {
-    List items = new LinkedList();
+    LinkedList items = new LinkedList();
     pendingEndChars.push((int) endChar);
     try {
       while (true) {
         AstNode form = readNextNestedForm();
         if (form == null) {
           throw new ReaderException("Unmatching paren '" + startChar + "'");
-        } else if (form == __END_NODE__) {
-          return createAstCodeNode(line, col, type, items);
+        } else if (form.type == __END__) {
+          // There might be non-code nodes such as white spaces
+          // between the latest code form and __END__. In this case, those
+          // nodes are stored as __END__'s pre position so we need to
+          // lift them to latest form's post position and if that is not possible
+          // we must use collection node's hidden content
+          if (!items.isEmpty()) {
+            AstNode lastForm = (AstNode) items.getLast();
+            lastForm.post.addAll(form.pre);
+            return createAstCodeNode(line, col, type, items);
+          } else {
+            AstNode collNode = createAstCodeNode(line, col, type, items);
+            collNode.hiddenChildren = new LinkedList<>(form.pre);
+            return collNode;
+          }
         } else {
           items.add(form);
         }
@@ -824,6 +838,7 @@ public class SourceReader {
     public final List<Object> children;
     public final List<AstNode> pre = new LinkedList<>();
     public final List<AstNode> post = new LinkedList<>();
+    public LinkedList<AstNode> hiddenChildren = null;
 
     private AstNode(int line, int col, Keyword type, List<Object> children) {
       this.line = line;
@@ -855,6 +870,12 @@ public class SourceReader {
               META_LINE, line,
               META_COL, col);
 
+      // hidden children is special case, no need to bloat, just add entry
+      if (this.hiddenChildren != null) {
+        meta = new HashMap(meta);
+        meta.put(META_CHILDREN, hiddenChildrenAsClj());
+      }
+
       return PersistentVector.create(this)
           .withMeta(PersistentArrayMap.create(meta));
     }
@@ -865,6 +886,10 @@ public class SourceReader {
 
     private IPersistentList postAsClj() {
       return PersistentList.create(post.stream().map(AstNode::toClojure).collect(Collectors.toUnmodifiableList()));
+    }
+
+    private IPersistentList hiddenChildrenAsClj() {
+      return PersistentList.create(hiddenChildren.stream().map(AstNode::toClojure).collect(Collectors.toUnmodifiableList()));
     }
 
     @Override
