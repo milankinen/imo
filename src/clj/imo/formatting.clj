@@ -3,24 +3,10 @@
   (:import (java.util LinkedList)
            (java.io Writer)))
 
-(def ^:dynamic *style* :none)
+(defmulti -fmt (fn [ctx _] (:style ctx)))
 
-(defmulti
-  -fmt-node
-  (fn [_ [node-type]]
-    {:pre [(keyword? node-type)]}
-    (case node-type
-      :newline :newline
-      :space :space
-      [*style* node-type])))
-
-(defmulti -fmt (fn [_ _] *style*))
-
-(defmethod -fmt-node :space [_ [_ s]] s)
-
-(defmethod -fmt-node :default [_ _] ::none)
-
-(defmethod -fmt :default [_ _] ::none)
+(defmethod -fmt :default [ctx _]
+  (throw (AssertionError. (str "No formatting defined for style: " (:style ctx)))))
 
 (defrecord Block [content
                   lines
@@ -28,9 +14,39 @@
                   shift
                   absolute])
 
-;
-; Public stuff
-;
+(declare block*)
+
+(defn- string->block [content]
+  {:pre [(string? content)]}
+  (let [n (.length content)
+        [length lines shift]
+        (loop [index 0
+               col 0
+               lines 0
+               max-len 0]
+          (if (< index n)
+            (let [ch (.charAt content index)]
+              (if (identical? \n ch)
+                (recur (inc index) 0 (inc lines) (max max-len col))
+                (recur (inc index) (inc col) lines max-len)))
+            [(max max-len col) lines col]))]
+    (->Block content
+             lines
+             length
+             shift
+             (pos? lines))))
+
+;;
+;; Public stuff
+;;
+
+(defn format
+  "Transforms the given AST node into output block"
+  [ctx node]
+  {:pre [(vector? node)
+         (map? ctx)]}
+  (when-some [content (-fmt ctx node)]
+    (block* (list content))))
 
 (defn block*
   "Creates an output block from the given contents."
@@ -49,10 +65,10 @@
         ; Leaf block
         (string? x)
         (if-not (.isEmpty x)
-          (let [len (.length x)
-                ; TODO: multiline string checks
-                block (->Block x 0 len len false)]
-            (recur xs (conj! res block) lines (+ col-shift len) absolute?))
+          (let [block (string->block x)
+                shift (:shift block)
+                absolute? (:absolute block)]
+            (recur xs (conj! res block) lines (+ col-shift shift) absolute?))
           (recur xs res lines col-shift absolute?))
 
         ; Already processed block
@@ -108,18 +124,6 @@
   "Same as block* but takes contents as variadic arguments."
   [& contents]
   (block* contents))
-
-(defn format
-  "Transforms the given AST node into output block"
-  [ctx node]
-  {:pre [(vector? node)
-         (map? ctx)]}
-  (let [b' (-fmt-node ctx node)
-        b (if (= ::none b') (-fmt ctx node) b')]
-    (when (= ::none b)
-      (throw (AssertionError. "No formatting defined for node: " (first node))))
-    (when (some? b)
-      (block* [b]))))
 
 (defn block->source
   "Transforms the given output block into source code."
