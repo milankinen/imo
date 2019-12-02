@@ -2,7 +2,7 @@ language: clojure
 lein: 2.9.1
 jdk:
   - openjdk11
-install: lein deps
+install: lein i
 script:
   - lein ancient
   - lein t

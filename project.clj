@@ -14,5 +14,8 @@
                              [eftest "0.5.9"]]}
              :uberjar
              {:aot :all}}
-  :aliases {"test" ["with-profile" "+dev,+test" "trampoline" "run" "-m" "test-runner/run-from-cli!"]
+  :aliases {"i"    ["do"
+                    ["with-profile" "+dev,+test" "deps"]
+                    ["with-profile" "+dev,+test" "deps" ":tree"]]
+            "test" ["with-profile" "+dev,+test" "trampoline" "run" "-m" "test-runner/run-from-cli!"]
             "t"    "test"})
