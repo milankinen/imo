@@ -9,4 +9,10 @@
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
   :target-path "target/%s"
-  :profiles {:uberjar {:aot :all}})
+  :profiles {:test
+             {:dependencies [[io.github.java-diff-utils/java-diff-utils "4.5"]
+                             [eftest "0.5.9"]]}
+             :uberjar
+             {:aot :all}}
+  :aliases {"test" ["with-profile" "+dev,+test" "trampoline" "run" "-m" "test-runner/run-from-cli!"]
+            "t"    "test"})
