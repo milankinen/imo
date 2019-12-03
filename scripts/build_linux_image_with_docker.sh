@@ -14,7 +14,7 @@ docker run --rm  \
   /bin/bash -c 'cd /host \
     && cp -r src scripts project.clj /work \
     && cd /work \
-    && lein build \
+    && lein native-image \
     && cp /work/target/native/imo-linux* /host/target/native/'
 
 echo "Done."

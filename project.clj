@@ -22,11 +22,12 @@
                      ["with-profile" "+dev,+test" "deps" ":tree"]]
             "test"  ["with-profile" "+dev,+test" "trampoline" "run" "-m" "test-runner/run-from-cli!"]
             "t"     "test"
-            "build" ["do"
-                     ["shell" "./scripts/setup_graalvm.sh" ~(-> (System/getProperty "java.version")
-                                                              (.replaceFirst "^1\\." "")
-                                                              (.split "\\.")
-                                                              (first))]
-                     ["clean"]
-                     ["uberjar"]
-                     ["shell" "./scripts/build_native_image.sh"]]})
+            "native-image" ["do"
+                            ["shell" "./scripts/setup_graalvm.sh" ~(-> (System/getProperty "java.version")
+                                                                     (.replaceFirst "^1\\." "")
+                                                                     (.split "\\.")
+                                                                     (first))]
+                            ["clean"]
+                            ["uberjar"]
+                            ["shell" "./scripts/build_native_image.sh"]]
+            "linux-image" ["shell" "./scripts/build_linux_image_with_docker.sh"]})

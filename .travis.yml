@@ -10,6 +10,6 @@ cache:
 script:
   - lein ancient
   - lein t
-  - lein build
+  - lein native-image
   # Smoke test for native image
   - echo "(ns foo.bar)" | target/native/imo-linux-amd64 -
