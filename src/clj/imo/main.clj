@@ -2,7 +2,10 @@
   (:require [clojure.tools.cli :refer [parse-opts]]
             [clojure.java.io :as io]
             [imo.core :as imo])
-  (:gen-class))
+  (:gen-class)
+  (:import (java.io File)))
+
+(set! *warn-on-reflection* true)
 
 ; For tests
 (def ^:dynamic *exit-jvm* true)
@@ -27,8 +30,8 @@
     [[] [] true]
     (if-let [errors (->> (map io/file args)
                          (keep #(cond
-                                  (not (.exists %)) (str "File does not exist: " %)
-                                  (not (.isFile %)) (str "Not a file: " %)
+                                  (not (.exists ^File %)) (str "File does not exist: " %)
+                                  (not (.isFile ^File %)) (str "Not a file: " %)
                                   :else nil))
                          (seq))]
       [[] errors false]

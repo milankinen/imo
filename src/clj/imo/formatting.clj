@@ -18,14 +18,14 @@
 
 (defn- string->block [content]
   {:pre [(string? content)]}
-  (let [n (.length content)
+  (let [n (.length ^String content)
         [length lines shift]
         (loop [index 0
                col 0
                lines 0
                max-len 0]
           (if (< index n)
-            (let [ch (.charAt content index)]
+            (let [ch (.charAt ^String content index)]
               (if (identical? \n ch)
                 (recur (inc index) 0 (inc lines) (max max-len col))
                 (recur (inc index) (inc col) lines max-len)))
@@ -64,7 +64,7 @@
 
         ; Leaf block
         (string? x)
-        (if-not (.isEmpty x)
+        (if-not (.isEmpty ^String x)
           (let [block (string->block x)
                 shift (:shift block)
                 absolute? (:absolute block)]
@@ -134,15 +134,15 @@
   (letfn [(prs [indent content out]
             (cond
               (string? content)
-              (do (.addLast out content)
-                  (+ indent (.length content)))
+              (do (.addLast ^LinkedList out content)
+                  (+ indent (.length ^String content)))
               (vector? content)
               (let [lf (str "\n" (.repeat " " indent))]
                 (if (seq content)
                   (loop [[x & xs] (map :content content)]
                     (if (seq xs)
                       (do (prs indent x out)
-                          (.addLast out lf)
+                          (.addLast ^LinkedList out lf)
                           (recur xs))
                       (prs indent x out)))
                   indent))
@@ -160,4 +160,4 @@
       "")))
 
 (defmethod print-method Block [block ^Writer writer]
-  (.write writer (block->source block)))
+  (.write ^Writer writer ^String (block->source block)))
