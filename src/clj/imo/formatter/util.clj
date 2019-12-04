@@ -147,3 +147,46 @@
 
 (defmethod print-method Block [block ^Writer writer]
   (.write ^Writer writer ^String (block->source block)))
+
+(defmacro match
+  "Pattern matcher specialized for matching AST nodes: if matching
+   symbol pattern, tries to resolve fully qualified name for that symbol
+   using the given context.
+
+   E.g. (match '[:list [:symbol ns]] ctx
+          [:list [:symbol clojure.core/ns] & _] 1
+          0)
+
+   Returns 1 because ns resolves to clojure.core/ns (unless shadowed
+   by local binding or similar...)
+  "
+  [ast-node-expr ctx-expr & patterns]
+  (assert (pos? (count patterns)) "Must have at least one pattern")
+  (assert (odd? (count patterns)) "Default case missing")
+  (let [ctx-sym `ctx#]
+    (letfn [(m [sym [[n-type & rem :as pat] f]]
+              (assert (keyword? n-type) "Can't wildcard node type")
+              (let [variadric? (= '[& _] (take-last 2 rem))
+                    child-pats (if variadric? (drop-last 2 rem) rem)]
+                `(when ~(if variadric?
+                          `(= ~n-type (first ~sym))
+                          `(and (= ~(count pat) (count ~sym))
+                                (= ~n-type (first ~sym))))
+                   ~(loop [[p & ps] child-pats
+                           idx (count child-pats)
+                           res f]
+                      (let [val `(nth ~sym ~idx)]
+                        (cond
+                          (nil? p) res
+                          (= '_ p) (recur ps (dec idx) res)
+                          (vector? p) (let [vsym `n#] (recur ps (dec idx) `(let [~vsym ~val] ~(m vsym [p res]))))
+                          (symbol? p) (recur ps (dec idx) `(let [~sym ~val] ~res))
+                          (and (sequential? p)
+                               (= 'quote (first p))) (recur ps (dec idx) `(when (= (imo.formatter.context/fq-name ~ctx-sym ~val) '~(second p)) ~res))
+                          :else (recur ps (dec idx) `(when (= ~val ~p) ~res))))))))]
+      (let [p+f (partition-all 2 2 (drop-last patterns))
+            default (last patterns)
+            sym `n#]
+        `(let [~sym ~ast-node-expr
+               ~ctx-sym ~ctx-expr]
+           (first (or ~@(map #(m sym [(first %) [(second %)]]) p+f) [~default])))))))
