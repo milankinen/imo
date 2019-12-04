@@ -1,15 +1,12 @@
 (ns imo.core
-  (:refer-clojure :exclude [format])
   (:require [imo.reader :as reader]
-            [imo.formatting :as formatting]
-            ; require to include style formatting implementations
-            [imo.style.preserve]))
+            [imo.formatter :as formatter]))
 
-(defn format [options src]
-  {:pre [(string? src)
-         (map? options)]}
-  (let [style (:style options)
-        ast (reader/read-ast src)
-        ctx {:style style}
-        blocks (formatting/format ctx ast)]
-    (pr-str blocks)))
+(defn format-source [options input]
+  {:pre  [(string? input)
+          (map? options)]
+   :post [(string? %)]}
+  (let [ast (reader/read-ast input)
+        blocks (formatter/format-ast options ast)
+        output (pr-str blocks)]
+    output))

@@ -12,16 +12,17 @@
   :java-source-paths ["src/java"]
   :target-path "target/%s"
   :uberjar-name "imo.jar"
-  :profiles {:test
-             {:dependencies [[io.github.java-diff-utils/java-diff-utils "4.5"]
-                             [eftest "0.5.9"]]}
-             :uberjar
-             {:aot :all}}
-  :aliases {"i"     ["do"
-                     ["with-profile" "+dev,+test" "deps"]
-                     ["with-profile" "+dev,+test" "deps" ":tree"]]
-            "test"  ["with-profile" "+dev,+test" "trampoline" "run" "-m" "test-runner/run-from-cli!"]
-            "t"     "test"
+  :global-vars {*warn-on-reflection* true}
+  :profiles {:test    {:dependencies [[io.github.java-diff-utils/java-diff-utils "4.5"]
+                                      [eftest "0.5.9"]]
+                       :global-vars  {*warn-on-reflection* false}}
+             :uberjar {:global-vars {*assert* false}
+                       :aot         :all}}
+  :aliases {"i"            ["do"
+                            ["with-profile" "+dev,+test" "deps"]
+                            ["with-profile" "+dev,+test" "deps" ":tree"]]
+            "test"         ["with-profile" "+dev,+test" "trampoline" "run" "-m" "imo.test-runner/run-from-cli!"]
+            "t"            "test"
             "native-image" ["do"
                             ["shell" "./scripts/setup_graalvm.sh" ~(-> (System/getProperty "java.version")
                                                                      (.replaceFirst "^1\\." "")
@@ -30,4 +31,4 @@
                             ["clean"]
                             ["uberjar"]
                             ["shell" "./scripts/build_native_image.sh"]]
-            "linux-image" ["shell" "./scripts/build_linux_image_with_docker.sh"]})
+            "linux-image"  ["shell" "./scripts/build_linux_image_with_docker.sh"]})

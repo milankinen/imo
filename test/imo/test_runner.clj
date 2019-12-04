@@ -1,4 +1,4 @@
-(ns test-runner
+(ns imo.test-runner
   (:require [clojure.string :as string]
             [eftest.runner :as runner]
             [eftest.report.progress]))

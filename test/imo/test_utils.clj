@@ -1,4 +1,4 @@
-(ns test-utils
+(ns imo.test-utils
   (:require [clojure.string :as string]
             [clojure.java.io :as io])
   (:import (com.github.difflib DiffUtils UnifiedDiffUtils)
@@ -11,7 +11,7 @@
   (let [f (io/file "test/__files__" filename)]
     (if (.exists f)
       (slurp f)
-      (throw (IllegalArgumentException. (str "Test file not found: " filename))))))
+      (throw (IllegalArgumentException. ^String (str "Test file not found: " filename))))))
 
 (defn diff
   "Returns a string diff from then given expected and actual

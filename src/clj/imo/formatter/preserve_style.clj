@@ -1,6 +1,6 @@
-(ns imo.style.preserve
-  (:require [imo.formatting :refer [-fmt]]
-            [clojure.string :as string]))
+(ns imo.formatter.preserve-style
+  (:require [clojure.string :as string]
+            [imo.formatter.util :refer [block]]))
 
 (declare node->src)
 
@@ -50,12 +50,15 @@
         post (map node->src (:post m))]
     (string/join "" (concat pre [base] post))))
 
-(defmethod -fmt :preserve
-  [_ node]
-  (let [s (node->src node)]
-    (if-let [col (:col (meta node))]
-      (if (pos? (dec col))
-        (as-> (re-pattern (str "\\n[ ]{0," (dec col) "}")) $
-              (string/replace s $ "\n"))
-        s)
-      s)))
+(defn format-node
+  "Formats the given node and all its children with style
+   that preserves the original formatting"
+  [node]
+  (let [src (node->src node)
+        out (if-let [col (:col (meta node))]
+              (if (pos? (dec col))
+                (as-> (re-pattern (str "\\n[ ]{0," (dec col) "}")) $
+                      (string/replace src $ "\n"))
+                src)
+              src)]
+    (block out)))

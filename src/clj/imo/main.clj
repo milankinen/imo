@@ -5,8 +5,6 @@
   (:gen-class)
   (:import (java.io File)))
 
-(set! *warn-on-reflection* true)
-
 ; For tests
 (def ^:dynamic *exit-jvm* true)
 
@@ -44,18 +42,19 @@
     (exit 1)))
 
 (defn- merge-options [opts]
-  (merge {:style :preserve} opts))
+  ; TODO
+  {})
 
 (defn- format! [options inputs+outputs]
   (doseq [[in out] inputs+outputs]
     (let [src-in (slurp in)
-          src-out (imo/format options src-in)]
+          src-out (imo/format-source options src-in)]
       (spit out src-out)))
   nil)
 
 
 (defn -main
-  "Command line entrypoint for imo"
+  "Command line entry point for imo"
   [& args]
   (let [{:keys [options
                 arguments

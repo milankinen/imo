@@ -1,12 +1,6 @@
-(ns imo.formatting
-  (:refer-clojure :exclude [format])
+(ns imo.formatter.util
   (:import (java.util LinkedList)
            (java.io Writer)))
-
-(defmulti -fmt (fn [ctx _] (:style ctx)))
-
-(defmethod -fmt :default [ctx _]
-  (throw (AssertionError. (str "No formatting defined for style: " (:style ctx)))))
 
 (defrecord Block [content
                   lines
@@ -40,14 +34,6 @@
 ;; Public stuff
 ;;
 
-(defn format
-  "Transforms the given AST node into output block"
-  [ctx node]
-  {:pre [(vector? node)
-         (map? ctx)]}
-  (when-some [content (-fmt ctx node)]
-    (block* (list content))))
-
 (defn block*
   "Creates an output block from the given contents."
   [contents]
@@ -68,7 +54,7 @@
           (let [block (string->block x)
                 shift (:shift block)
                 absolute? (:absolute block)]
-            (recur xs (conj! res block) lines (+ col-shift shift) absolute?))
+            (recur xs (conj! res block) lines (long (+ col-shift shift)) absolute?))
           (recur xs res lines col-shift absolute?))
 
         ; Already processed block
@@ -77,7 +63,7 @@
               shift' (if-not (:absolute x)
                        (+ col-shift (:shift x))
                        (:shift x))]
-          (recur xs (conj! res x) lines' shift' (:absolute x)))
+          (recur xs (conj! res x) (long lines') (long shift') (:absolute x)))
 
         ; Potential multiline block to align
         (vector? x)
@@ -100,7 +86,7 @@
                     shift' (if-not last-absolute?
                              (+ col-shift last-shift)
                              last-shift)]
-                (recur xs (conj! res block) lines' shift' last-absolute?)))))
+                (recur xs (conj! res block) (long lines') (long shift') last-absolute?)))))
 
         ; Group of blocks without alignment
         (sequential? x)
