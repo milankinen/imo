@@ -13,7 +13,8 @@
   :target-path "target/%s"
   :uberjar-name "imo.jar"
   :global-vars {*warn-on-reflection* true}
-  :profiles {:test    {:dependencies [[io.github.java-diff-utils/java-diff-utils "4.5"]
+  :profiles {:dev     {:repl-options {:init-ns repl}}
+             :test    {:dependencies [[io.github.java-diff-utils/java-diff-utils "4.5"]
                                       [eftest "0.5.9"]]
                        :global-vars  {*warn-on-reflection* false}}
              :uberjar {:global-vars {*assert* false}
