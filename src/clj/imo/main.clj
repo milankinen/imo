@@ -2,7 +2,7 @@
   (:require [clojure.tools.cli :as cli]
             [clojure.java.io :as io]
             [imo.core :as imo]
-            [imo.logger :refer [vv warn] :as logger]
+            [imo.logger :refer [vv vvv warn] :as logger]
             [imo.config :as config]
             [clojure.string :as string]
             [clojure.edn :as edn]
@@ -25,6 +25,7 @@
    ["-c" "--config FILE" "Path to configuration file"]
    [nil "--config-override EDN" "Overrides to the configuration in EDN string"]
    [nil "--cache-file FILE" "Cache file for already checked source files detection"]
+   [nil "--check" "Run IMO in check mode and report unformatted files as failures"]
    ["-v" nil "Increment verbosity level (-v or -vv or -vvv)"
     :id :verbosity
     :default 0
@@ -168,17 +169,36 @@
       (throw (user-ex errors))
       [(map io/file args) false])))
 
-(defn- format! [config inputs+outputs cache]
+(defn- do-files [f inputs+outputs cache]
   (doseq [[in out] inputs+outputs]
     (let [name (when (instance? File in) (.getName ^File in))]
-      (when name (vv "Formatting file: " name))
       (binding [logger/*current-file* name]
+        (vv "Reading source...")
         (let [src-in (slurp in)]
-          (if-not (cached? cache in src-in)
+          (if (cached? cache in src-in)
+            (vvv "File found from cache, skipping...")
+            (f src-in out cache)))))))
+
+(defn- format-files! [config inputs+outputs cache]
+  (letfn [(format! [src-in out cache]
+            (vvv "Formatting source...")
             (let [src-out (imo/format-source config src-in)]
+              (vvv "Writing formatted source...")
               (spit out src-out)
-              (cache! cache out src-out))
-            (vv "File (" name ") found from cache, skipping...")))))))
+              (cache! cache out src-out)))]
+    (do-files format! inputs+outputs cache)))
+
+(defn- check-files! [config inputs+outputs cache]
+  (let [errors (atom [])]
+    (letfn [(check! [src-in _ _]
+              (vvv "Checking source...")
+              (let [src-out (imo/format-source config src-in)]
+                (when (not= src-in src-out)
+                  (let [d (imo/diff src-in src-out)]
+                    (swap! errors conj (str (or logger/*current-file* "stdin") " - following differences found:\n" d))))))]
+      (do-files check! inputs+outputs cache))
+    (when (seq @errors)
+      (throw (user-ex @errors)))))
 
 ; Entrypoint
 
@@ -203,11 +223,14 @@
               inputs+outputs (if-not stdin?
                                (map #(do [% %]) files)
                                [[*in* *out*]])
-              format-config (load-config options)
-              log-level (get options :verbosity 0)]
+              config (load-config options)
+              log-level (get options :verbosity 0)
+              check-mode? (true? (get options :check))]
           (binding [logger/*debug-out* (if stdin? *err* *out*)
                     logger/*log-level* log-level]
-            (format! format-config inputs+outputs cache)
+            (if check-mode?
+              (check-files! config inputs+outputs cache)
+              (format-files! config inputs+outputs cache))
             (store! cache))))
       (exit 0))
     (catch UserCausedException ex
@@ -223,7 +246,7 @@
 (comment
 
   (alter-var-root #'*exit-jvm* (constantly false))
-  (-main "--help")
+  (-main "--check" "test/test_file.clj")
 
   (parse-opts ["-c" "foo.bar"] cli-options)
 
