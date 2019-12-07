@@ -11,7 +11,7 @@
        (into {})))
 
 (defrecord Ctx
-  [^Map options
+  [^Map config
    ^Integer level
    ^Map bindings
    ^Map aliases])
@@ -21,11 +21,11 @@
 
 (defn create
   "Creates a new context instance with sane defaults"
-  [options]
+  [config]
   (let [level 0
         bindings default-bindings
         aliases {}]
-    (->Ctx options
+    (->Ctx config
            level
            bindings
            aliases)))

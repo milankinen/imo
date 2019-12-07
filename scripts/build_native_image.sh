@@ -17,6 +17,7 @@ echo "Build native image: $output"
 .graalvm/bin/native-image \
   --report-unsupported-elements-at-runtime \
   --initialize-at-build-time \
+  --no-fallback \
   -jar ./target/uberjar/imo.jar \
   -H:Name=${output}
 
