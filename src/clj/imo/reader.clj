@@ -19,24 +19,10 @@
   (-> (normalize-newlines source)
       (SourceReader/readAst)))
 
-(defn print-ast [node]
-  ; pprint does not support meta so extract it and place
-  ; it to the beginning of ast node
-  (letfn [(lift-meta [x]
-            (postwalk #(if (and (vector? %) (not (map-entry? %)))
-                         (into [(first %) (or (lift-meta (meta %)) {})] (rest %))
-                         %)
-                      x))]
-    (pp/pprint (lift-meta node))))
-
 (comment
 
-  (def ast (read-ast "
-
-  (def ^:private foo 123)
-  "))
+  (def ast (read-ast "\n"))
 
   (meta ast)
-  (print-ast ast)
 
   '-)
