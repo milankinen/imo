@@ -4,20 +4,12 @@
 (def PosInt
   (s/constrained s/Int pos-int? 'PosInt))
 
-(def Width
-  (s/constrained
-    [(s/one PosInt "Target width")
-     (s/one PosInt "Max width")]
-    (fn [[target max]]
-      (<= target max))
-    "Target width must be smaller than max width"))
-
 (def Config
-  {:width            Width
+  {:width            PosInt
    :optimize-imports s/Bool})
 
 (def defaults
-  {:width            [80 120]
+  {:width            80
    :optimize-imports false})
 
 (defn check
