@@ -1,6 +1,8 @@
-(ns imo.formatter.preserve-style
+(ns imo.formatter.preserve
   (:require [clojure.string :as string]
-            [imo.formatter.util :refer [block]]))
+            [imo.formatter.layout :as l]
+            [imo.util :refer [split-lines]]
+            [imo.ast :as ast]))
 
 (declare node->src)
 
@@ -39,7 +41,7 @@
                :anon_fn (str "#(" (nodes->src children) ")")
                :discard (str "#_" (node->src (first children)))
                :reader_cond (str "#?" (node->src (first children)))
-               :tagged_literal (str "@" (node->src (first children)))
+               :tagged_literal (str "#" (nodes->src children))
                :regex (first children)
                :comment (str (first children) "\n")
                :space (first children)
@@ -53,12 +55,21 @@
 (defn format-node
   "Formats the given node and all its children with style
    that preserves the original formatting"
-  [node]
+  [node output]
+  {:pre [(ast/node? node)
+         (l/output? output)]}
   (let [src (node->src node)
-        out (if-let [col (:col (meta node))]
-              (if (pos? (dec col))
-                (as-> (re-pattern (str "\\n[ ]{0," (dec col) "}")) $
-                      (string/replace src $ "\n"))
-                src)
-              src)]
-    (block out)))
+        src' (if-let [col (:col (meta node))]
+               (let [re (re-pattern (str "\\n[ ]{0," (dec col) "}"))]
+                 (string/replace src re "\n"))
+               src)]
+    (if-not (.isEmpty ^String src')
+      (loop [[line & lines] (split-lines src')
+             out (l/push-align output)]
+        (if (not-empty lines)
+          (->> (l/push-token out line)
+               (l/push-newline)
+               (recur lines))
+          (->> (l/push-token out line)
+               (l/pop-align))))
+      output)))

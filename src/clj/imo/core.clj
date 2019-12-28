@@ -1,7 +1,7 @@
 (ns imo.core
   (:require [imo.reader :as reader]
             [imo.formatter :as formatter]
-            [clojure.string :as string])
+            [imo.util :refer [split-lines]])
   (:import (java.util LinkedList)
            (com.github.difflib DiffUtils UnifiedDiffUtils)))
 
@@ -10,8 +10,7 @@
           (map? config)]
    :post [(string? %)]}
   (let [ast (reader/read-ast input)
-        blocks (formatter/format-ast config ast)
-        output (pr-str blocks)]
+        output (formatter/format-ast config ast)]
     output))
 
 (defn diff
@@ -23,8 +22,8 @@
   [expected actual]
   {:pre [(string? expected)
          (string? actual)]}
-  (let [expected-lines (LinkedList. (string/split-lines expected))
-        actual-lines (LinkedList. (string/split-lines actual))
+  (let [expected-lines (LinkedList. (split-lines expected))
+        actual-lines (LinkedList. (split-lines actual))
         patch (DiffUtils/diff expected-lines actual-lines)
         udiff (UnifiedDiffUtils/generateUnifiedDiff "expected" "actual" expected-lines patch 1)]
     (with-out-str

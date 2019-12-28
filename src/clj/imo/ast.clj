@@ -1,7 +1,7 @@
 (ns imo.ast
   (:refer-clojure :exclude [vector? symbol? string? number? nil?
                             boolean? char? keyword? tagged-literal?
-                            list? map?])
+                            list? map? flatten])
   (:require [clojure.core :as core]))
 
 (defn- node= [type]
@@ -45,4 +45,9 @@
 
 
 (def children next)
+
+(defn flatten [node]
+  (let [node' (vary-meta node assoc :pre nil :post nil :children nil)
+        m (meta node)]
+    (concat (:pre m) [node'] (:children m) (:post m))))
 
