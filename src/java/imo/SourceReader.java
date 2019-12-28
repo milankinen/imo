@@ -41,6 +41,8 @@ public class SourceReader {
   private static Keyword SYMBOLIC_VALUE = Keyword.intern("symbolic_val");
 
   /* Meta attributes for ast nodes */
+  private static Keyword META_NODE = Keyword.intern("node");
+  private static Keyword META_ID = Keyword.intern("id");
   private static Keyword META_LINE = Keyword.intern("line");
   private static Keyword META_COL = Keyword.intern("col");
   private static Keyword META_PRE = Keyword.intern("pre");
@@ -58,7 +60,7 @@ public class SourceReader {
 
 
   public static IPersistentVector readAst(String source) {
-    return new SourceReader(source).readProgram().toClojure();
+    return new SourceReader(source).readProgram().toClojure(new IdGenerator());
   }
 
   private interface FormReader {
@@ -641,10 +643,12 @@ public class SourceReader {
           // lift them to latest form's post position and if that is not possible
           // we must use collection node's hidden content
           if (!items.isEmpty()) {
+            // e.g. (foo )
             AstNode lastForm = (AstNode) items.getLast();
             lastForm.post.addAll(form.pre);
             return createAstCodeNode(line, col, type, items);
           } else {
+            // e.g. [ ]
             AstNode collNode = createAstCodeNode(line, col, type, items);
             collNode.hiddenChildren = new LinkedList<>(form.pre);
             return collNode;
@@ -831,7 +835,7 @@ public class SourceReader {
     pendingNodes.add(new AstNode(line, col, WHITESPACE, List.of(ws)));
   }
 
-  private static class AstNode implements Iterable<Object> {
+  private static class AstNode {
     public final int line;
     public final int col;
     public final Keyword type;
@@ -847,86 +851,88 @@ public class SourceReader {
       this.children = children;
     }
 
-    IPersistentVector toClojure() {
-      // This is a bit verbose but at least it is FAST
-      Map meta =
-          !pre.isEmpty() && !post.isEmpty()
-              ? Map.of(
-              META_LINE, line,
-              META_COL, col,
-              META_PRE, preAsClj(),
-              META_POST, postAsClj())
-              : !pre.isEmpty()
-              ? Map.of(
-              META_LINE, line,
-              META_COL, col,
-              META_PRE, preAsClj())
-              : !post.isEmpty()
-              ? Map.of(
-              META_LINE, line,
-              META_COL, col,
-              META_POST, postAsClj())
-              : Map.of(
-              META_LINE, line,
-              META_COL, col);
-
-      // hidden children is special case, no need to bloat, just add entry
-      if (this.hiddenChildren != null) {
-        meta = new HashMap(meta);
-        meta.put(META_CHILDREN, hiddenChildrenAsClj());
+    IPersistentVector toClojure(IdGenerator gen) {
+      Map<Keyword, Object> meta = new HashMap<>(8);
+      meta.put(META_NODE, true);
+      meta.put(META_ID, gen.nextId());
+      meta.put(META_LINE, line);
+      meta.put(META_COL, col);
+      if (!pre.isEmpty()) {
+        meta.put(META_PRE, preAsClj(gen));
       }
-
-      return PersistentVector.create(this)
+      if (!post.isEmpty()) {
+        meta.put(META_POST, postAsClj(gen));
+      }
+      if (this.hiddenChildren != null && !this.hiddenChildren.isEmpty()) {
+        meta.put(META_CHILDREN, hiddenChildrenAsClj(gen));
+      }
+      return PersistentVector.create(new It(gen))
           .withMeta(PersistentArrayMap.create(meta));
     }
 
-    private IPersistentList preAsClj() {
-      return PersistentList.create(pre.stream().map(AstNode::toClojure).collect(Collectors.toUnmodifiableList()));
+    private IPersistentList preAsClj(final IdGenerator gen) {
+      return PersistentList.create(pre.stream().map(node -> node.toClojure(gen)).collect(Collectors.toUnmodifiableList()));
     }
 
-    private IPersistentList postAsClj() {
-      return PersistentList.create(post.stream().map(AstNode::toClojure).collect(Collectors.toUnmodifiableList()));
+    private IPersistentList postAsClj(final IdGenerator gen) {
+      return PersistentList.create(post.stream().map(node -> node.toClojure(gen)).collect(Collectors.toUnmodifiableList()));
     }
 
-    private IPersistentList hiddenChildrenAsClj() {
-      return PersistentList.create(hiddenChildren.stream().map(AstNode::toClojure).collect(Collectors.toUnmodifiableList()));
+    private IPersistentList hiddenChildrenAsClj(final IdGenerator gen) {
+      return PersistentList.create(hiddenChildren.stream().map(node -> node.toClojure(gen)).collect(Collectors.toUnmodifiableList()));
     }
 
-    @Override
-    public Iterator<Object> iterator() {
-      return new Iterator<Object>() {
-        private boolean typeRead = false;
-        private Iterator<Object> childIt = children.iterator();
+    private class It implements Iterable<Object> {
+      final IdGenerator gen;
 
-        @Override
-        public boolean hasNext() {
-          return !typeRead || childIt.hasNext();
-        }
+      private It(IdGenerator gen) {
+        this.gen = gen;
+      }
 
-        @Override
-        public Object next() {
-          if (!typeRead) {
-            typeRead = true;
-            return type;
+      @Override
+      public Iterator<Object> iterator() {
+        return new Iterator<Object>() {
+          private boolean typeRead = false;
+          private Iterator<Object> childIt = children.iterator();
+
+          @Override
+          public boolean hasNext() {
+            return !typeRead || childIt.hasNext();
           }
-          Object n = childIt.next();
-          if (n instanceof AstNode) {
-            return ((AstNode) n).toClojure();
-          } else {
-            return n;
+
+          @Override
+          public Object next() {
+            if (!typeRead) {
+              typeRead = true;
+              return type;
+            }
+            Object n = childIt.next();
+            if (n instanceof AstNode) {
+              return ((AstNode) n).toClojure(gen);
+            } else {
+              return n;
+            }
           }
-        }
-      };
-    }
+        };
+      }
 
-    @Override
-    public void forEach(Consumer<? super Object> action) {
-      throw new RuntimeException("Not implemented");
-    }
+      @Override
+      public void forEach(Consumer<? super Object> action) {
+        throw new RuntimeException("Not implemented");
+      }
 
-    @Override
-    public Spliterator<Object> spliterator() {
-      throw new RuntimeException("Not implemented");
+      @Override
+      public Spliterator<Object> spliterator() {
+        throw new RuntimeException("Not implemented");
+      }
+    }
+  }
+
+  private static class IdGenerator {
+    private long count = 0;
+
+    public long nextId() {
+      return ++this.count;
     }
   }
 
