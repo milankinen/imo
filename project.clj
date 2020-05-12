@@ -5,10 +5,9 @@
   :plugins [[lein-ancient "0.6.15"]
             [lein-shell "0.5.0"]]
   :dependencies [[org.clojure/clojure "1.10.1"]
-                 [org.clojure/core.match "0.3.0"]
-                 [org.clojure/tools.cli "0.4.2"]
+                 [org.clojure/tools.cli "1.0.194"]
                  [prismatic/schema "1.1.12"]
-                 [io.github.java-diff-utils/java-diff-utils "4.5"]]
+                 [io.github.java-diff-utils/java-diff-utils "4.7"]]
   :main ^:skip-aot imo.main
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
@@ -16,7 +15,8 @@
   :uberjar-name "imo.jar"
   :global-vars {*warn-on-reflection* true}
   :profiles {:dev     {:jvm-opts     [~(str "-Dimo.version=" :project/version)]
-                       :repl-options {:init-ns repl}}
+                       :repl-options {:init-ns repl}
+                       :global-vars  {*warn-on-reflection* true}}
              :test    {:dependencies [[eftest "0.5.9"]]
                        :global-vars  {*warn-on-reflection* false}}
              :uberjar {:global-vars {*assert* false}
