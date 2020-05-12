@@ -1,8 +1,7 @@
 # IMO
 
 [![Build status](https://img.shields.io/travis/milankinen/imo?style=for-the-badge)](https://travis-ci.org/milankinen/imo/builds)
-
-Opinionated Clojure(Script) code formatting. 
+[![Clojars](https://img.shields.io/clojars/v/imo?style=for-the-badge)](https://clojars.org/imo)
 
 `WIP...`
 

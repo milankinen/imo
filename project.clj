@@ -1,4 +1,4 @@
-(defproject imo "0.1.0-SNAPSHOT"
+(defproject imo "0.0.1"
   :description "Opinionated Clojure(Script) code formatting"
   :url "https://github.com/milankinen/imo"
   :license {:name "MIT" :url "https://opensource.org/licenses/MIT"}
