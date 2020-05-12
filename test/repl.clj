@@ -1,5 +1,6 @@
 (ns repl
   (:require [imo.reader :as reader]
+            [imo.analysis :as analysis]
             [imo.logger :refer [timed] :as logger]
             [imo.test-utils :refer [load-test-file]]
             [clojure.string :as string]
@@ -15,7 +16,8 @@
   (->> (string/split-lines s)
        (map #(string/replace % #"^\s*\|" ""))
        (string/join "\n")
-       (reader/read-ast)))
+       (reader/read-ast)
+       (analysis/analyze-ast)))
 
 (defmacro ast* [& body]
   `(->> ~(vec (map str body))
