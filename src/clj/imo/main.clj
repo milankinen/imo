@@ -9,14 +9,14 @@
             [schema.core :as s])
   (:gen-class)
   (:import (java.io File ByteArrayInputStream)
-           (imo UserCausedException)
+           (imo ImoException)
            (java.security MessageDigest)))
 
 ; For tests
 (defonce ^:dynamic *exit-jvm* true)
 
-(defn user-ex [errors]
-  (UserCausedException. (string/join "\n" errors)))
+(defn imo-ex [errors]
+  (ImoException. (string/join "\n" errors)))
 
 ; CLI options and help
 
@@ -53,7 +53,7 @@
       (-> (slurp (io/input-stream input))
           (edn/read-string)))
     (catch Exception ex
-      (throw (user-ex ["Config parsing failed: " (.getMessage ex)])))))
+      (throw (imo-ex ["Config parsing failed: " (.getMessage ex)])))))
 
 (defn- config-merge [default user-config overrides]
   (letfn [(m [x y]
@@ -67,7 +67,7 @@
   (let [user-config (if-let [c (get opts :config)]
                       (let [f (io/file c)]
                         (when-not (and (.exists ^File f) (.isFile ^File f))
-                          (throw (user-ex [(str "Config file does not exist: " c)])))
+                          (throw (imo-ex [(str "Config file does not exist: " c)])))
                         (parse-config f))
                       (let [f (io/file default-config-file)]
                         (if (and (.exists ^File f) (.isFile ^File f))
@@ -78,7 +78,7 @@
                     {})
         final-config (config-merge config/defaults user-config overrides)]
     (when-let [error-msg (config/check final-config)]
-      (throw (user-ex [error-msg])))
+      (throw (imo-ex [error-msg])))
     final-config))
 
 ; Caching
@@ -143,15 +143,15 @@
                        (let [c (binding [*read-eval* false]
                                  (edn/read-string (slurp file)))]
                          (when (s/check CacheFile c)
-                           (throw (user-ex ["Cache file is not valid"])))
+                           (throw (imo-ex ["Cache file is not valid"])))
                          c))]
         (if (= cache-file-version (:version contents))
           (->FileCache file (atom (:files contents)))
           (->FileCache file (atom {}))))
-      (catch UserCausedException ex
+      (catch ImoException ex
         (throw ex))
       (catch Exception ex
-        (throw (user-ex [(str "Cache file load failure: " (.getMessage ^Exception ex))]))))
+        (throw (imo-ex [(str "Cache file load failure: " (.getMessage ^Exception ex))]))))
     noop-cache))
 
 
@@ -166,7 +166,7 @@
                                   (not (.isFile ^File %)) (str "Not a file: " %)
                                   :else nil))
                          (seq))]
-      (throw (user-ex errors))
+      (throw (imo-ex errors))
       [(map io/file args) false])))
 
 (defn- do-files [f inputs+outputs cache]
@@ -198,7 +198,7 @@
                     (swap! errors conj (str (or logger/*current-file* "stdin") " - following differences found:\n" d))))))]
       (do-files check! inputs+outputs cache))
     (when (seq @errors)
-      (throw (user-ex @errors)))))
+      (throw (imo-ex @errors)))))
 
 ; Entrypoint
 
@@ -215,7 +215,7 @@
         (print-help summary)
 
         (seq errors)
-        (throw (user-ex errors))
+        (throw (imo-ex errors))
 
         :else
         (let [[files stdin?] (parse-files arguments)
@@ -233,7 +233,7 @@
               (format-files! config inputs+outputs cache))
             (store! cache))))
       (exit 0))
-    (catch UserCausedException ex
+    (catch ImoException ex
       (binding [*out* *err*]
         (println (.getMessage ex)))
       (exit 1))
