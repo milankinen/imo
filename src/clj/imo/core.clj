@@ -1,6 +1,6 @@
 (ns imo.core
   (:require [imo.reader :as reader]
-            [imo.formatter :as formatter]
+            [imo.formatting :as formatter]
             [imo.util :refer [split-lines]])
   (:import (java.util LinkedList)
            (com.github.difflib DiffUtils UnifiedDiffUtils)))
@@ -9,9 +9,8 @@
   {:pre  [(string? input)
           (map? config)]
    :post [(string? %)]}
-  (let [ast (reader/read-ast input)
-        output (formatter/format-ast config ast)]
-    output))
+  (->> (reader/read-ast input)
+       (formatter/format-ast config)))
 
 (defn diff
   "Returns a string diff from then given expected and actual

@@ -1,5 +1,6 @@
 (ns imo.util
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as string])
+  (:import (imo AstNode)))
 
 (defn split-lines
   "Like string/split-lines but handles also special case where
@@ -8,74 +9,54 @@
   {:pre [(string? s)]}
   (string/split s #"\n" -1))
 
+(defn node? [x]
+  (and (vector? x)
+       (true? (:imo/node (meta x)))))
 
-(defmacro match
-  "Returns matched nodes if the given value expression matches to the given
-   match expression or nil if there is no match.
+(defn begin-chars [node-type]
+  {:pre [(keyword? node-type)]}
+  (AstNode/getBeginChars node-type))
 
-   Notation:
+(defn end-chars [node-type]
+  {:pre [(keyword? node-type)]}
+  (AstNode/getEndChars node-type))
 
-     _   = any node type
-     ..? = zero or one matches
-     ..* = zero or more matches
-     ..+ = at least one match
+(defn node->source [node]
+  {:pre [(node? node)]}
+  (letfn [(to-str! [^StringBuilder sb node]
+            (doseq [n (:pre (meta node))]
+              (to-str! sb n))
+            (when-let [chars (begin-chars (first node))]
+              (.append sb ^String chars))
+            (doseq [child (concat (next node) (:hidden (meta node)))]
+              (cond
+                (vector? child) (to-str! sb child)
+                (string? child) (.append sb ^String child)
+                (nil? child) nil
+                :else (throw (RuntimeException. (str "Invalid node: " (pr-str child))))))
+            (when-let [chars (end-chars (first node))]
+              (.append sb ^String chars))
+            (doseq [n (:post (meta node))]
+              (to-str! sb n)))]
+    (let [sb (StringBuilder.)]
+      (to-str! sb node)
+      (.toString sb))))
 
-   For example:
+(defn start-of [node]
+  {:pre [(node? node)]}
+  {:start {:line (:line (meta node))
+           :col  (:col (meta node))}})
 
-     (let [m (match nodes '[_ symbol string? map? list*])]
-       (println m))
+(defn end-of [node]
+  {:pre [(node? node)]}
+  (let [node-s (node->source node)
+        line (+ (:line (meta node))
+                (count (filter #{\n} node-s)))
+        col (+ (:col (meta node))
+               (->> (reverse node-s)
+                    (take-while (comp not #{\n}))
+                    (count)))]
+    {:end {:line line :col col}}))
 
-   Matches the following form
-
-     (ns foo.bar
-       (:require [clojure.string :as string])
-       (:import (java.util Date))
-
-   ...and returns (simplified):
-
-     [ns foo.bar nil nil [(:require ...) (:import ...)]]
-
-   "
-  [val-expr match-expr]
-  (assert (= 2 (count match-expr)))
-  (assert (= 'quote (first match-expr)))
-  (assert (vector? (second match-expr)))
-  (let [value (gensym "value")
-        result (gensym "result")
-        m (fn m [[e & rem]]
-            (if (some? e)
-              (let [expr-s (str e)
-                    v (gensym)
-                    optional? (or (string/ends-with? expr-s "*")
-                                  (string/ends-with? expr-s "?"))
-                    multi? (or (string/ends-with? expr-s "*")
-                               (string/ends-with? expr-s "+"))
-                    expr-s (string/replace expr-s #"[*+?]$" "")
-                    matches? (if (= "_" expr-s)
-                               `(some? ~v)
-                               `(= ~(keyword expr-s) (first ~v)))]
-                (if multi?
-                  (let [loop-res (gensym)
-                        loop-val (gensym)]
-                    `(let [[~v ~value]
-                           (loop [~loop-res (transient [])
-                                  ~loop-val ~value]
-                             (let [~v (first ~loop-val)]
-                               (if ~matches?
-                                 (recur (conj! ~loop-res ~v) (next ~loop-val))
-                                 [(persistent! ~loop-res) ~loop-val])))]
-                       (when ~(if optional? true `(not-empty ~v))
-                         (let [~result (conj! ~result ~v)]
-                           ~(m rem)))))
-                  `(let [~v (first ~value)]
-                     (if ~matches?
-                       (let [~result (conj! ~result ~v)
-                             ~value (next ~value)]
-                         ~(m rem))
-                       ~(when optional?
-                          `(let [~result (conj! ~result nil)]
-                             ~(m rem)))))))
-              `(persistent! ~result)))]
-    `(let [~value ~val-expr
-           ~result (transient [])]
-       ~(m (second match-expr)))))
+(defn entire [node]
+  (merge (start-of node) (end-of node)))

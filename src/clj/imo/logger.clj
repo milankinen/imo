@@ -67,3 +67,16 @@
   `(when (>= *log-level* 3)
      (binding [*out* *debug-out*]
        (-log nil nil "DEBUG" ~(vec xs)))))
+
+(defmacro timed
+  "Prints time"
+  [operation & body]
+  `(if (>= *log-level* 3)
+     (let [op# ~operation]
+       (vvv "start " op# "...")
+       (let [start# (System/nanoTime)
+             result# (do ~@body)
+             end# (System/nanoTime)]
+         (vvv (format "%s complete, took: %.2f ms" op# (/ (- end# start#) 1000000.0)))
+         result#))
+     (do ~@body)))
