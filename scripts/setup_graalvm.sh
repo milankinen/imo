@@ -9,14 +9,15 @@ fi
 cd "$(dirname $0)/.."
 java_major_version="$1"
 root_dir="$(pwd)"
-graalvm_dir="$root_dir/.graalvm"
+
+graalvm_version=$(cat ${root_dir}/graalvm.version)
+graalvm_dir="$root_dir/.graalvm/$graalvm_version"
 
 if [[ -f "$graalvm_dir/bin/gu" ]]; then
   echo "GraalVM already installed, skip setup step."
   exit 0
 fi
 
-graalvm_version="19.3.0"
 
 case "$(uname -s)" in
   Linux*)     graalvm_os="linux-amd64" ;;
@@ -31,7 +32,6 @@ mkdir -p "$graalvm_dir"
 cd "$graalvm_dir"
 echo "Download..."
 curl -L -o graalvm.tar.gz "$graalvm_url"
-JAVA_VER=
 
 echo "Unpack..."
 tar xzf graalvm.tar.gz

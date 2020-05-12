@@ -2,6 +2,9 @@
 set -euo pipefail
 
 cd "$(dirname $0)/.."
+root_dir="$(pwd)"
+graalvm_version=$(cat ${root_dir}/graalvm.version)
+graalvm_dir="$root_dir/.graalvm/$graalvm_version"
 
 case "$(uname -s)" in
     Linux*)     binary_name="imo-linux-amd64" ;;
@@ -14,7 +17,7 @@ mkdir -p target/native
 output="$(pwd)/target/native/$binary_name"
 echo "Build native image: $output"
 
-.graalvm/bin/native-image \
+$graalvm_dir/bin/native-image \
   --report-unsupported-elements-at-runtime \
   --initialize-at-build-time \
   --no-fallback \
