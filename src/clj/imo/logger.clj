@@ -1,13 +1,16 @@
 (ns imo.logger)
 
-(def ^{:dynamic true :doc "Current log level for logging operations"}
-  *log-level* 0)
+(def ^:dynamic *log-level*
+  "Current log level for logging operations"
+  0)
 
-(def ^{:dynamic true :doc "Current file to show in warning and debug logs"}
-  *current-file* nil)
+(def ^:dynamic *current-file*
+  "Current file to show in warning and debug logs"
+  nil)
 
-(def ^{:dynamic true :doc "Output channel for debug logs"}
-  *debug-out* *out*)
+(def ^:dynamic *debug-out*
+  "Output channel for debug logs"
+  *out*)
 
 (defn- print* [& xs]
   (doseq [x xs]
@@ -59,7 +62,7 @@
        (log nil "DEBUG" ~(vec xs)))))
 
 (defmacro timed
-  "Prints time"
+  "Prints timing information of the given operation"
   [operation & body]
   `(if (>= *log-level* 3)
      (let [op# ~operation]
