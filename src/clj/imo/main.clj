@@ -41,7 +41,8 @@
 (defn print-out [& xs]
   (binding [*out* logger/*debug-out*]
     (doseq [x (filter some? xs)]
-      (print x))))
+      (print x))
+    (flush)))
 
 (defn- print-help [opts-summary]
   (println "Usage: imo [options ...] files...     format specified files in-place")
