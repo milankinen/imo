@@ -11,10 +11,11 @@
   [node-type & children]
 
   If the source can't be readed (it contains e.g. syntax errors),
-  imo.ReaderException will be thrown.
-  "
-  [source]
-  {:pre  [(string? source)]
-   :post [(node? %)]}
-  (timed "reader"
-    (SourceReader/readAst source)))
+  imo.ReaderException will be thrown."
+  ([source] (read-ast source 2))
+  ([source tab-size]
+   {:pre  [(string? source)
+           (pos-int? tab-size)]
+    :post [(node? %)]}
+   (timed "reader"
+     (SourceReader/readAst source tab-size))))

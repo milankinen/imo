@@ -21,9 +21,9 @@ public class SourceReader {
   private static Pattern FLOAT_PAT = Pattern.compile("([-+]?[0-9]+(\\.[0-9]*)?([eE][-+]?[0-9]+)?)(M)?");
   private static Keyword END_OF_COLL = Keyword.intern("*end-of-coll*");
 
-  public static PersistentVector readAst(String source) {
+  public static PersistentVector readAst(String source, int tabSize) {
     source = source.replaceAll("(\n|\r\n|\r)", "\n");
-    return new SourceReader(source).readRoot().toVec();
+    return new SourceReader(source, tabSize).readRoot().toVec();
   }
 
   private interface FormReader {
@@ -33,6 +33,7 @@ public class SourceReader {
   private final FormReader[] macros = new FormReader[256];
   private final FormReader[] dispatchMacros = new FormReader[256];
   private final Stack<Integer> pendingEndChars = new Stack<>();
+  private final int tabSize;
   private final String _source;
   private final int _len;
   private int _index = 0;
@@ -42,7 +43,8 @@ public class SourceReader {
   private LinkedList<AstNode> pendingMetaNodes = null;
   private AstNode latestReadNode = null;
 
-  private SourceReader(String source) {
+  private SourceReader(String source, int tabSize) {
+    this.tabSize = tabSize;
     _source = source;
     _len = _source.length();
     macros['"'] = this::readStringNode;
@@ -107,6 +109,9 @@ public class SourceReader {
         _col++;
       }
       if (isWhitespace(ch)) {
+        if (ch == '\t') {
+          _col += tabSize - 1;
+        }
         handleWhitespace(line, col);
         continue;
       }
@@ -227,10 +232,9 @@ public class SourceReader {
       if (isNewline(ch)) {
         _line++;
         _col = 1;
-        continue;
-      }
-
-      if (ch == '\\') {
+      } else if (ch == '\t') {
+        _col += tabSize - 1;
+      } else if (ch == '\\') {
         //escaped character
         ch = read1();
         _col++;
@@ -279,8 +283,9 @@ public class SourceReader {
       if (isNewline(ch)) {
         _line++;
         _col = 1;
-      }
-      if (ch == '\\') {
+      } else if (ch == '\t') {
+        _col += tabSize - 1;
+      } else if (ch == '\\') {
         // escape
         ch = read1();
         if (ch == -1)
@@ -807,7 +812,7 @@ public class SourceReader {
       if (!isWhitespace(c) || isNewline(c)) {
         break;
       } else {
-        _col++;
+        _col += c == '\t' ? tabSize : 1;
       }
     }
     unread1();
