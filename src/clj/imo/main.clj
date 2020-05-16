@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [cognitect.transit :as transit]
             [imo.core :as imo]
+            [imo.glob :as glob]
             [imo.logger :refer [v vv vvv warn] :as logger]
             [imo.config :as config]
             [clojure.string :as string]
@@ -165,17 +166,18 @@
 
 ; Input/output
 
-(defn- parse-files-seq [args]
-  (if (= ["-"] args)
+(defn- parse-files-seq [globs]
+  (if (= ["-"] globs)
     [[] true]
-    (if-let [errors (->> (map io/file args)
-                         (keep #(cond
-                                  (not (.exists ^File %)) (str "File does not exist: " %)
-                                  (not (.isFile ^File %)) (str "Not a file: " %)
-                                  :else nil))
-                         (seq))]
-      (throw (imo-ex errors))
-      [(map io/file args) false])))
+    (let [files (->> (mapcat glob/files globs)
+                     (group-by #(.getAbsolutePath ^File %))
+                     (sort-by first)
+                     (map (comp first second))
+                     (filter #(and (.exists ^File %)
+                                   (.isFile ^File %))))]
+      (when (empty? files)
+        (throw (imo-ex ["No matching files found"])))
+      [files false])))
 
 (defn- format-files! [config inputs+outputs]
   (let [n-total (count inputs+outputs)
@@ -270,7 +272,7 @@
     (catch ImoException ex
       (binding [*out* *err*]
         (println (.getMessage ex)))
-      (exit 1))
+      (exit -1))
     (catch Exception ex
       (binding [*out* *err*]
         (println "Unexpected error occurred, please raise an issue at https://github.com/milankinen/imo/issues/new")
@@ -279,6 +281,7 @@
 
 (comment
   (alter-var-root #'*exit-jvm* (constantly false))
-  (-main "--check" "foo.clj")
+  (-main "--check" "test/**/*.clj")
+
 
   '-)
