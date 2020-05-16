@@ -195,8 +195,8 @@
               (let [src-out (imo/format-source config src-in)]
                 (when-not (= src-out src-in)
                   (spit out src-out)
-                  (cache! cache out src-out)
                   (swap! n-changed inc))
+                (cache! cache out src-out)))))))
     (print-out
       (format "Formatting ready, took %.2f secs" (/ (- (System/nanoTime) start-t) 1000000000.0))
       " ✨"
