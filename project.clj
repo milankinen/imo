@@ -4,10 +4,11 @@
   :license {:name "MIT" :url "https://opensource.org/licenses/MIT"}
   :plugins [[lein-ancient "0.6.15"]
             [lein-shell "0.5.0"]]
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.10.2-alpha1"]
                  [org.clojure/tools.cli "1.0.194"]
-                 [prismatic/schema "1.1.12"]
-                 [io.github.java-diff-utils/java-diff-utils "4.7"]]
+                 [com.cognitect/transit-clj "1.0.324"]
+                 [io.github.java-diff-utils/java-diff-utils "4.7"]
+                 [expound "0.8.4"]]
   :main ^:skip-aot imo.main
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]

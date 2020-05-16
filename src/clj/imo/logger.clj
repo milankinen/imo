@@ -29,7 +29,7 @@
     (if col
       (-print ":" col ") ")
       (-print ") ")))
-  (-print " - ")
+  (-print ": ")
   (doseq [x xs]
     (-print x))
   (-print "\n")
@@ -44,8 +44,8 @@
   [node & xs]
   (binding [*out* *err*]
     (if-let [[line# col#] (line-col node)]
-      (-log line# col# "WARN" xs)
-      (-log nil nil "WARN" (cons node xs)))))
+      (-log line# col# "WARN " xs)
+      (-log nil nil "WARN " (cons node xs)))))
 
 (defmacro v
   "Prints debug logging with level 1 (-v)"
