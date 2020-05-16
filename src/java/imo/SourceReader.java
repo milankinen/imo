@@ -39,8 +39,8 @@ public class SourceReader {
   private int _line = 1;
   private int _col = 1;
   private int _mark = -1;
-  private LinkedList<AstNode> pendingNodes = null;
-  private AstNode prevNode = null;
+  private LinkedList<AstNode> pendingMetaNodes = null;
+  private AstNode latestReadNode = null;
 
   private SourceReader(String source) {
     _source = source;
@@ -85,12 +85,11 @@ public class SourceReader {
       forms.add(form);
     }
     AstNode root = createRoot(forms);
-    root.post = pendingNodes;
+    root.post = pendingMetaNodes;
     return root;
   }
 
   private AstNode readNextForm() {
-    prevNode = null;
     for (; ; ) {
       mark();
       int line = _line;
@@ -102,7 +101,7 @@ public class SourceReader {
       if (isNewline(ch)) {
         _line++;
         _col = 1;
-        handleNewLine(line, col);
+        handleLineBreak(createNewline(line, col));
         continue;
       } else {
         _col++;
@@ -137,26 +136,23 @@ public class SourceReader {
     }
   }
 
-  private AstNode readNextNestedForm() {
-    // Ensure that discarded form gets it's own pre and post
-    // nodes, e.g. case:  #_ ^:foo bar "tsers"
-    // bar should have ^:foo as pre and the discard node
-    // should be pre (or post) of the outer level
-    LinkedList<AstNode> pending = pendingNodes;
-    LinkedList<AstNode> after = null;
-    AstNode next;
-    try {
-      pendingNodes = null;
-      next = readNextForm();
-      after = pendingNodes;
-    } finally {
-      pendingNodes = pending;
-    }
-    // readNextForm should always place pendingNodes to readed node's
-    // pre position. If that's not the case, we have a potential bug here
-    assert after == null || after.isEmpty();
-    return next;
+  private <T> T nested(NestedReader<T> reader) {
+    AstNode latest = latestReadNode;
+    LinkedList<AstNode> pending = pendingMetaNodes;
+    pendingMetaNodes = null;
+    latestReadNode = null;
+    T result = reader.read();
+    // nested reader should leave pending meta nodes clean
+    assert pendingMetaNodes == null || pendingMetaNodes.isEmpty();
+    latestReadNode = latest;
+    pendingMetaNodes = pending;
+    return result;
   }
+
+  private interface NestedReader<T> {
+    T read();
+  }
+
 
   /*
    * Leaf nodes: these nodes do not contain any other nested
@@ -178,7 +174,7 @@ public class SourceReader {
     if (!isNumber(num)) {
       throw new NumberFormatException("Invalid number: " + num);
     }
-    return withPre(createNumber(line, col, num));
+    return handleNode(createNumber(line, col, num));
   }
 
   private String readToken() {
@@ -196,11 +192,11 @@ public class SourceReader {
   private AstNode tokenToAstNode(String token, int line, int col) {
     switch (token) {
       case "nil":
-        return withPre(createNil(line, col));
+        return handleNode(createNil(line, col));
       case "true":
-        return withPre(createBoolean(line, col, true));
+        return handleNode(createBoolean(line, col, true));
       case "false":
-        return withPre(createBoolean(line, col, false));
+        return handleNode(createBoolean(line, col, false));
       default: {
         Matcher m = SYM_PAT.matcher(token);
         if (m.matches()) {
@@ -212,9 +208,9 @@ public class SourceReader {
             throw new ReaderException("Invalid symbol: " + token);
           }
           if (token.charAt(0) == ':') {
-            return withPre(createKeyword(line, col, token));
+            return handleNode(createKeyword(line, col, token));
           } else {
-            return withPre(createSymbol(line, col, token));
+            return handleNode(createSymbol(line, col, token));
           }
         }
         throw new ReaderException("Invalid token: " + token);
@@ -272,7 +268,7 @@ public class SourceReader {
       }
     }
     String s = readMarked();
-    return withPre(createString(line, col, s));
+    return handleNode(createString(line, col, s));
   }
 
   private AstNode readRegexNode(int line, int col) {
@@ -297,7 +293,7 @@ public class SourceReader {
     } catch (Exception e) {
       throw new ReaderException("Invalid regex");
     }
-    return withPre(createRegex(line, col, regex));
+    return handleNode(createRegex(line, col, regex));
   }
 
   private AstNode readCharNode(int line, int col) {
@@ -309,13 +305,13 @@ public class SourceReader {
       String token = readToken();
       String chStr = token.substring(1);
       if (chStr.length() == 1) {
-        return withPre(createChar(line, col, token));
+        return handleNode(createChar(line, col, token));
       } else if (chStr.startsWith("u")) {
         char c = (char) readUnicodeChar(chStr, 1, 4, 16);
         if (c >= '\ud800' && c <= '\udfff') {
           throw new ReaderException("Invalid character constant: \\u" + Integer.toString(c, 16));
         } else {
-          return withPre(createChar(line, col, token));
+          return handleNode(createChar(line, col, token));
         }
       } else if (chStr.startsWith("o")) {
         int len = chStr.length() - 1;
@@ -326,7 +322,7 @@ public class SourceReader {
           if (uc > 255) {
             throw new ReaderException("Octal escape sequence must be in range [0, 377].");
           } else {
-            return withPre(createChar(line, col, token));
+            return handleNode(createChar(line, col, token));
           }
         }
       } else {
@@ -337,7 +333,7 @@ public class SourceReader {
           case "backspace":
           case "formfeed":
           case "return":
-            return withPre(createChar(line, col, token));
+            return handleNode(createChar(line, col, token));
           default:
             throw new ReaderException("Unsupported character: \\" + chStr);
         }
@@ -349,15 +345,15 @@ public class SourceReader {
     int ch = read1();
     if (ch == -1 || isWhitespace(ch) || isTerminatingMacro(ch)) {
       unread1();
-      return withPre(createSymbol(line, col, readMarked()));
+      return handleNode(createSymbol(line, col, readMarked()));
     } else if (ch == '&') {
       _col++;
-      return withPre(createSymbol(line, col, readMarked()));
+      return handleNode(createSymbol(line, col, readMarked()));
     } else if (Character.isDigit(ch)) {
       _col++;
       while (Character.isDigit(read1())) _col++;
       unread1();
-      return withPre(createSymbol(line, col, readMarked()));
+      return handleNode(createSymbol(line, col, readMarked()));
     } else {
       throw new ReaderException("Arg literal must be %, %& or %integer");
     }
@@ -402,7 +398,7 @@ public class SourceReader {
           _line++;
           _col = 1;
         }
-        addPending(createComment(line, col, readMarked()));
+        handleLineBreak(createComment(line, col, readMarked()));
         break;
       } else {
         _col++;
@@ -412,16 +408,21 @@ public class SourceReader {
   }
 
   private AstNode readDiscardNode(int line, int col) {
-    AstNode discarded = readNextNestedForm();
+    AstNode discarded = nested(this::readNextForm);
     if (discarded == null) {
       throw new ReaderException("Unexpected EOF after discard");
     }
-    addPending(createDiscard(line, col, discarded));
+    handleMetaNode(createDiscard(line, col, discarded));
     return readNextForm();
   }
 
   private AstNode readMetaNode(int line, int col) {
-    AstNode form = readNextNestedForm();
+    // Special case:
+    //   foo ^Meta <newline>
+    //   bar
+    // => bar should get ^Meta as :pre, thus ending foo before actual newline
+    markLatestReadNodeAsComplete();
+    AstNode form = nested(this::readNextForm);
     if (form == null) {
       throw new ReaderException("Unexpected EOF while reading metadata");
     }
@@ -432,7 +433,7 @@ public class SourceReader {
         || STRING.equals(type))) {
       throw new ReaderException("Metadata must be Symbol, Keyword, String or Map");
     }
-    addPending(createMeta(line, col, form));
+    handleMetaNode(createMeta(line, col, form));
     return readNextForm();
   }
 
@@ -449,7 +450,7 @@ public class SourceReader {
     } else {
       unread1();
     }
-    AstNode next = readNextNestedForm();
+    AstNode next = nested(this::readNextForm);
     if (next == null) {
       throw new ReaderException("Unexpected EOF while reading reader conditional");
     }
@@ -459,39 +460,39 @@ public class SourceReader {
     if (splice) {
       next = createDeref(line, col + 2, next);
     }
-    return withPre(createReaderCond(line, col, next));
+    return handleNode(createReaderCond(line, col, next));
   }
 
   private AstNode readQuoteNode(int line, int col) {
-    AstNode inner = readNextNestedForm();
+    AstNode inner = nested(this::readNextForm);
     if (inner == null) {
       throw new ReaderException("Unexpected EOF while reading quote");
     }
-    return withPre(createQuote(line, col, inner));
+    return handleNode(createQuote(line, col, inner));
   }
 
   private AstNode readSyntaxQuoteNode(int line, int col) {
-    AstNode inner = readNextNestedForm();
+    AstNode inner = nested(this::readNextForm);
     if (inner == null) {
       throw new ReaderException("Unexpected EOF while reading syntax quote");
     }
-    return withPre(createSyntaxQuote(line, col, inner));
+    return handleNode(createSyntaxQuote(line, col, inner));
   }
 
   private AstNode readDerefNode(int line, int col) {
-    AstNode inner = readNextNestedForm();
+    AstNode inner = nested(this::readNextForm);
     if (inner == null) {
       throw new ReaderException("Unexpected EOF while reading deref");
     }
-    return withPre(createDeref(line, col, inner));
+    return handleNode(createDeref(line, col, inner));
   }
 
   private AstNode readVarQuoteNode(int line, int col) {
-    AstNode inner = readNextNestedForm();
+    AstNode inner = nested(this::readNextForm);
     if (inner == null) {
       throw new ReaderException("Unexpected EOF while reading var quote");
     }
-    return withPre(createVarQuote(line, col, inner));
+    return handleNode(createVarQuote(line, col, inner));
   }
 
   private AstNode readUnquoteNode(int line, int col) {
@@ -503,11 +504,11 @@ public class SourceReader {
     } else {
       unread1();
     }
-    AstNode inner = readNextNestedForm();
+    AstNode inner = nested(this::readNextForm);
     if (inner == null) {
       throw new ReaderException("Unexpected EOF after unquote");
     }
-    return withPre(splice
+    return handleNode(splice
         ? createUnquoteSplice(line, col, inner)
         : createUnquote(line, col, inner));
   }
@@ -537,45 +538,48 @@ public class SourceReader {
   }
 
   private AstNode readNsMapNode(int line, int col) {
-    boolean auto = false;
+    boolean _auto = false;
     int autoChar = read1();
     if (autoChar == ':') {
-      auto = true;
+      _auto = true;
       _col++;
     } else {
       unread1();
     }
-
-    AstNode next = readNextNestedForm();
-    if (next == null) {
-      throw new ReaderException("EOF while reading namespace map literal");
-    }
-    if (SYMBOL.equals(next.type)) {
-      AstNode symbolPart = next;
-      if (symbolPart.pre != null) {
-        throw new ReaderException("Namespaced map must specify a namespace");
-      }
-      AstNode mapPart = readNextNestedForm();
-      if (mapPart == null) {
+    final boolean auto = _auto;
+    AstNode nsMap = nested(() -> {
+      AstNode next = readNextForm();
+      if (next == null) {
         throw new ReaderException("EOF while reading namespace map literal");
       }
-      if (!MAP.equals(mapPart.type)) {
+      if (SYMBOL.equals(next.type)) {
+        AstNode symbolPart = next;
+        if (symbolPart.pre != null) {
+          throw new ReaderException("Namespaced map must specify a namespace");
+        }
+        AstNode mapPart = readNextForm();
+        if (mapPart == null) {
+          throw new ReaderException("EOF while reading namespace map literal");
+        }
+        if (!MAP.equals(mapPart.type)) {
+          throw new ReaderException("Namespaced map must specify a map");
+        }
+        String nsName = (auto ? "::" : ":") + symbolPart.children.get(0);
+        AstNode ns = createKeyword(symbolPart.line, symbolPart.col, nsName);
+        return handleNode(createNsMap(line, col, List.of(ns, mapPart)));
+      } else if (MAP.equals(next.type)) {
+        if (!auto) {
+          throw new ReaderException("Namespaced map must specify a namespace");
+        }
+        // case #::{}
+        AstNode nsPart = createKeyword(line, col, "::");
+        AstNode mapPart = next;
+        return createNsMap(line, col, List.of(nsPart, mapPart));
+      } else {
         throw new ReaderException("Namespaced map must specify a map");
       }
-      String nsName = (auto ? "::" : ":") + symbolPart.children.get(0);
-      AstNode ns = createKeyword(symbolPart.line, symbolPart.col, nsName);
-      return withPre(createNsMap(line, col, List.of(ns, mapPart)));
-    } else if (MAP.equals(next.type)) {
-      if (!auto) {
-        throw new ReaderException("Namespaced map must specify a namespace");
-      }
-      // case #::{}
-      AstNode nsPart = createKeyword(line, col, "::");
-      AstNode mapPart = next;
-      return withPre(createNsMap(line, col, List.of(nsPart, mapPart)));
-    } else {
-      throw new ReaderException("Namespaced map must specify a map");
-    }
+    });
+    return handleNode(nsMap);
   }
 
   private interface CollNodeCtor {
@@ -583,39 +587,43 @@ public class SourceReader {
   }
 
   private AstNode readCollectionNode(CollNodeCtor ctor, char endChar, int line, int col) {
-    LinkedList<AstNode> items = new LinkedList<>();
     pendingEndChars.push((int) endChar);
-    try {
+    AstNode coll = nested(() -> {
+      LinkedList<AstNode> items = new LinkedList<>();
       while (true) {
-        AstNode form = readNextNestedForm();
-        if (form == null) {
+        AstNode item = readNextForm();
+        if (item == null) {
           throw new ReaderException("Unmatching paren '" + endChar + "'");
-        } else if (form.type == END_OF_COLL) {
+        } else if (item.type == END_OF_COLL) {
           // There might be non-code nodes such as white spaces
-          // between the latest code form and __END__. In this case, those
-          // nodes are stored as __END__'s pre position so we need to
+          // between the latest code form and EOC. In this case, those
+          // nodes are stored as EOC's pre position so we need to
           // lift them to latest form's post position and if that is not possible
           // we must use collection node's hidden content
+          AstNode collNode = ctor.create(line, col, items);
+          assert collNode.hidden == null;
           if (!items.isEmpty()) {
             // e.g. (foo )
-            AstNode lastForm = items.getLast();
-            assert lastForm.post == null;
-            lastForm.post = form.pre;
-            return withPre(ctor.create(line, col, items));
+            AstNode lastItem = items.getLast();
+            if (item.pre != null) {
+              if (lastItem.post != null) {
+                collNode.hidden = item.pre;
+              } else {
+                lastItem.post = item.pre;
+              }
+            }
           } else {
             // e.g. [ ]
-            AstNode collNode = withPre(ctor.create(line, col, items));
-            assert collNode.hidden == null;
-            collNode.hidden = form.pre;
-            return collNode;
+            collNode.hidden = item.pre;
           }
+          return collNode;
         } else {
-          items.add(form);
+          items.add(item);
         }
       }
-    } finally {
-      pendingEndChars.pop();
-    }
+    });
+    pendingEndChars.pop();
+    return handleNode(coll);
   }
 
   private AstNode readEvalNode(int line, int col) {
@@ -631,27 +639,30 @@ public class SourceReader {
     if (reader == null) {
       // Try interpret as tagged literal
       unread1();
-      AstNode tag = readNextNestedForm();
-      if (tag == null) {
-        throw new ReaderException("EOF while reading dispatch macro");
-      }
-      if (!SYMBOL.equals(tag.type)) {
-        throw new ReaderException("Reader tag must be a symbol");
-      }
-      AstNode literal = readNextNestedForm();
-      if (literal == null) {
-        throw new ReaderException("Missing tagged literal value");
-      }
-      return withPre(createTaggedLiteral(line, col, List.of(tag, literal)));
+      AstNode taggedLiteral = nested(() -> {
+        AstNode tag = readNextForm();
+        if (tag == null) {
+          throw new ReaderException("EOF while reading dispatch macro");
+        }
+        if (!SYMBOL.equals(tag.type)) {
+          throw new ReaderException("Reader tag must be a symbol");
+        }
+        AstNode literal = readNextForm();
+        if (literal == null) {
+          throw new ReaderException("Missing tagged literal value");
+        }
+        return createTaggedLiteral(line, col, List.of(tag, literal));
+      });
+      return handleNode(taggedLiteral);
     }
     _col++;
     return reader.readNext(line, col);
   }
 
   private AstNode readSymbolicValueNode(int line, int col) {
-    AstNode sym = readNextNestedForm();
+    AstNode sym = nested(this::readNextForm);
     if (sym == null) {
-      throw new ReaderException("Unexpected EOF while reading var quote");
+      throw new ReaderException("Unexpected EOF while reading symbolic value");
     }
     if (!SYMBOL.equals(sym.type)) {
       throw new ReaderException("Unknown symbolic value");
@@ -661,7 +672,7 @@ public class SourceReader {
       case "Inf":
       case "-Inf":
       case "NaN": {
-        return withPre(createSymbolicVal(line, col, sym));
+        return handleNode(createSymbolicVal(line, col, sym));
       }
       default:
         throw new ReaderException("Invalid token: ##" + value);
@@ -673,7 +684,7 @@ public class SourceReader {
    */
 
   private AstNode endOfColl(int line, int col) {
-    return withPre(new AstNode(line, col, END_OF_COLL, List.of()));
+    return handleNode(new AstNode(line, col, END_OF_COLL, List.of()));
   }
 
   private int readUnicodeChar(String token, int offset, int length, int base) {
@@ -761,21 +772,33 @@ public class SourceReader {
     _index--;
   }
 
-  private void handleNewLine(int line, int col) {
-    addPending(createNewline(line, col));
-    if (prevNode != null) {
-      assert prevNode.post == null;
-      prevNode.post = pendingNodes;
-      pendingNodes = null;
-      prevNode = null;
+  private void handleLineBreak(AstNode breakingNode) {
+    handleMetaNode(breakingNode);
+    markLatestReadNodeAsComplete();
+  }
+
+  private void markLatestReadNodeAsComplete() {
+    if (latestReadNode != null) {
+      assert latestReadNode.post == null;
+      latestReadNode.post = pendingMetaNodes;
+      pendingMetaNodes = null;
+      latestReadNode = null;
     }
   }
 
-  private <NodeType extends AstNode> NodeType withPre(NodeType codeNode) {
-    assert codeNode.pre == null;
-    codeNode.pre = pendingNodes;
-    pendingNodes = null;
-    return codeNode;
+  private void handleMetaNode(AstNode metaNode) {
+    if (pendingMetaNodes == null) {
+      pendingMetaNodes = new LinkedList<>();
+    }
+    pendingMetaNodes.add(metaNode);
+  }
+
+  private <NodeType extends AstNode> NodeType handleNode(NodeType node) {
+    assert node.pre == null;
+    node.pre = pendingMetaNodes;
+    pendingMetaNodes = null;
+    latestReadNode = node;
+    return node;
   }
 
   private void handleWhitespace(int line, int col) {
@@ -787,17 +810,9 @@ public class SourceReader {
         _col++;
       }
     }
-    ;
     unread1();
     String ws = readMarked();
-    addPending(createSpace(line, col, ws));
-  }
-
-  private void addPending(AstNode pending) {
-    if (pendingNodes == null) {
-      pendingNodes = new LinkedList<>();
-    }
-    pendingNodes.add(pending);
+    handleMetaNode(createSpace(line, col, ws));
   }
 
   private static boolean isNewline(int ch) {
