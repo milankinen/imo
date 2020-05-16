@@ -4,7 +4,7 @@
             [imo.analysis.spec :refer [->Err ->State] :as s]
             [imo.analysis.ns-publics :as publics]
             [imo.logger :refer [timed]]
-            [imo.util :refer [node? entire]])
+            [imo.util :refer [node? start-of]])
   (:import (imo.analysis.spec State)))
 
 ;; Utils
@@ -181,7 +181,7 @@
   (let [bindings-analyzer (s/as-analyzer (s/* binding-spec))
         analyzer (fn [ctx [_ & children :as node]]
                    (when-not (even? (count children))
-                     (throw (a/analysis-ex (entire node) "bindings must contain even number of forms")))
+                     (throw (a/analysis-ex (start-of node) "bindings must contain even number of forms")))
                    (bindings-analyzer ctx node))]
     (s/node :vector "bindings" analyzer)))
 

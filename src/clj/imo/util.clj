@@ -44,8 +44,8 @@
 
 (defn start-of [node]
   {:pre [(node? node)]}
-  {:start {:line (:line (meta node))
-           :col  (:col (meta node))}})
+  {:line (:line (meta node))
+   :col  (:col (meta node))})
 
 (defn end-of [node]
   {:pre [(node? node)]}
@@ -56,7 +56,4 @@
                (->> (reverse node-s)
                     (take-while (comp not #{\n}))
                     (count)))]
-    {:end {:line line :col col}}))
-
-(defn entire [node]
-  (merge (start-of node) (end-of node)))
+    {:line line :col col}))

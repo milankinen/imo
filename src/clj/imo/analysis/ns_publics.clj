@@ -1,5 +1,4 @@
-(ns imo.analysis.ns-publics
-  (:require [imo.logger :refer [warn]]))
+(ns imo.analysis.ns-publics)
 
 (def clojure-core
   '[clojure.core/primitives-classnames

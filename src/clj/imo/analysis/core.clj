@@ -1,28 +1,19 @@
 (ns imo.analysis.core
   (:require [imo.analysis.context :refer [ctx? create-binding]]
-            [imo.util :refer [node? node->source start-of]])
+            [imo.util :refer [node? node->source start-of]]
+            [imo.logger :refer [warn]])
   (:import (imo AnalysisException)))
 
-(defn warn [{:keys [start end]} msg]
-  (let [line (:line start)
-        col (:col start)]
-    ; TODO proper warning
-    (println (str "WARN " line ":" col " - " msg))))
-
-(defn analysis-ex [{:keys [start end]} msg & rest]
-  (let [message (apply str (cons msg rest))
-        start-line (int (or (:line start) (:line end)))
-        start-col (int (or (:col start) (:col end)))
-        end-line (int (or (:line end) (:line start)))
-        end-col (int (or (:col end) (:col start)))]
-    (AnalysisException. message start-line start-col end-line end-col)))
+(defn analysis-ex [{:keys [line col]} msg & rest]
+  {:pre [(pos-int? line)
+         (pos-int? col)
+         (string? msg)]}
+  (let [message (apply str (cons msg rest))]
+    (AnalysisException. message line col)))
 
 (defn ex->position [^AnalysisException ex]
-  (let [start {:line (.-startLine ex)
-               :col  (.-startCol ex)}
-        end {:line (.-endLine ex)
-             :col  (.-endCol ex)}]
-    {:start start :end end}))
+  {:line (.-line ex)
+   :col  (.-col ex)})
 
 (declare analyze-with)
 

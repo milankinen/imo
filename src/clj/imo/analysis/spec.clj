@@ -6,7 +6,7 @@
                                        analysis-ex
                                        get-node-type
                                        get-literal-content]]
-            [imo.util :refer [entire end-of]])
+            [imo.util :refer [start-of end-of]])
   (:import (clojure.lang IDeref)))
 
 ;; Utils
@@ -61,7 +61,7 @@
 
 (defn error [parent node message]
   (let [position (if (some? node)
-                   (entire node)
+                   (start-of node)
                    (end-of parent))]
     (->Err position message)))
 
@@ -214,7 +214,7 @@
             rem (state->remaining ^State output)
             res (state->result ^State output)]
         (if-let [extra (first rem)]
-          (throw (analysis-ex (entire extra) "no more forms expected"))
+          (throw (analysis-ex (start-of extra) "no more forms expected"))
           [ctx' (persistent! res)])))))
 
 (defn- composed-analyzer [analyzer post-analyzer]
@@ -256,7 +256,7 @@
             (or any-node? (= expected-type (get-node-type ctx node)))
             (let [[ctx' n'] (analyze-with analyzer ctx node)]
               (State. ctx' (next rem) (conj! res n')))
-            :else (->Err (entire node) (str "expected " spec-name " to be " expected-type))))))))
+            :else (->Err (start-of node) (str "expected " spec-name " to be " expected-type))))))))
 
 ;; Shorthand specs
 
@@ -275,7 +275,7 @@
 (def simple-symbol-node
   (letfn [(post-analyzer [ctx [_ content :as node]]
             (when-not (simple-symbol? (symbol content))
-              (throw (analysis-ex (entire node) (str "expected " name " to be simple symbol"))))
+              (throw (analysis-ex (start-of node) (str "expected " name " to be simple symbol"))))
             [ctx node])]
     (make-shorthand :symbol (composed-analyzer default-node-analyzer post-analyzer))))
 

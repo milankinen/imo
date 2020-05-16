@@ -133,7 +133,7 @@
                 writer (transit/writer os :json)]
             (transit/write writer contents)))
         (catch Exception ex
-          (warn "Cache file writing failed: " (.getMessage ^Exception ex)))))))
+          (warn nil "cache file writing failed: " (.getMessage ^Exception ex)))))))
 
 (defn- check-cache-file-contents [spec contents filename]
   (when-not (s/valid? spec contents)
