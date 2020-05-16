@@ -187,7 +187,7 @@
     (with-open [cache ^Closeable (open-cache config true)]
       (doseq [[in out name] inputs+outputs]
         (binding [logger/*current-file* name]
-          (v "start formatting file...")
+          (v "format file")
           (let [src-in (slurp in)]
             (if (cached? cache in src-in)
               (do (v "found from cached, skipping")
@@ -197,7 +197,6 @@
                   (spit out src-out)
                   (cache! cache out src-out)
                   (swap! n-changed inc))
-                (v "file formatted")))))))
     (print-out
       (format "Formatting ready, took %.2f secs" (/ (- (System/nanoTime) start-t) 1000000000.0))
       " ✨"
@@ -215,7 +214,7 @@
     (with-open [cache ^Closeable (open-cache config false)]
       (doseq [[in _ name] inputs+outputs]
         (binding [logger/*current-file* name]
-          (v "start checking file...")
+          (v "check file")
           (let [src-in (slurp in)]
             (if (cached? cache in src-in)
               (do (v "found from cached, skipping")
@@ -225,8 +224,7 @@
                 (when failed?
                   (binding [*out* *err*]
                     (println (str "ERROR " name ": check failed")))
-                  (swap! n-failed inc))
-                (v "file checked, failed? = " failed?)))))))
+                  (swap! n-failed inc))))))))
     (print-out
       (if (pos-int? @n-failed) "\n" "")
       (format "Check ready, took %.2f secs" (/ (- (System/nanoTime) start-t) 1000000000.0))
@@ -281,7 +279,7 @@
 
 (comment
   (alter-var-root #'*exit-jvm* (constantly false))
-  (-main "--check" "test/**/*.clj")
+  (-main #_"--check" "-vv" "test/**/*.clj" "src/**/*.clj")
 
 
   '-)
