@@ -181,7 +181,7 @@
         n-cached (atom 0)
         n-changed (atom 0)
         start-t (System/nanoTime)]
-    (with-open [cache (open-cache config true)]
+    (with-open [cache ^Closeable (open-cache config true)]
       (doseq [[in out name] inputs+outputs]
         (binding [logger/*current-file* name]
           (v "start formatting file...")
@@ -209,7 +209,7 @@
         n-failed (atom 0)
         n-cached (atom 0)
         start-t (System/nanoTime)]
-    (with-open [cache (open-cache config false)]
+    (with-open [cache ^Closeable (open-cache config false)]
       (doseq [[in _ name] inputs+outputs]
         (binding [logger/*current-file* name]
           (v "start checking file...")
