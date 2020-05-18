@@ -1,5 +1,4 @@
 (ns imo.formatting.core
-  (:refer-clojure :exclude [format])
   (:require [imo.util :refer [node?]])
   (:import (java.io Writer)
            (imo Layout)
@@ -35,12 +34,6 @@
    width-factor]
   (let [width (int (Math/ceil (* target-width width-factor)))]
     (Layout/shrinkUntil layout 0 0 width target-precedence)))
-
-(defn- print* [^Layout layout]
-  (let [sb (StringBuilder.)]
-    (.print layout sb 0)
-    (.toString sb)))
-
 
 (declare raw inline align alt dynamic |* | -| -|* space layout? layout)
 
@@ -253,22 +246,24 @@
                (-|* (conj (subvec full-lines 1) (group-line-n last-line))))
             (group-line-1 last-line)))))))
 
-(defn format
-  "Formats the given layout trying to fit it into the given
-   target width"
-  [layout width]
-  {:pre [(or (layout? layout)
-             (nil? layout))
+(defn fit [^Layout layout width]
+  "Tries to fit layout to the target given target width"
+  {:pre [(layout? layout)
          (pos-int? width)]}
-  (if layout
-    (-> layout
-        (shrink* width BEST 1.0)
-        (shrink* width BETTER 1.1)
-        (shrink* width GOOD 1.2)
-        (shrink* width WORSE 1.3)
-        (shrink* width WORST 1.5)
-        (print*))
-    ""))
+  (-> layout
+      (shrink* width BEST 1.0)
+      (shrink* width BETTER 1.1)
+      (shrink* width GOOD 1.2)
+      (shrink* width WORSE 1.3)
+      (shrink* width WORST 1.5)))
+
+(defn render
+  "Renders the given layout to a string"
+  [^Layout layout]
+  {:pre [(layout? layout)]}
+  (let [sb (StringBuilder.)]
+    (.print layout sb 0)
+    (.toString sb)))
 
 (def space
   "Pre-calculated constant output for spaces"

@@ -26,7 +26,7 @@ public class Util {
     }
   }
 
-  public static String indentation(int cols) {
+  public static String spaces(int cols) {
     char[] chars = new char[cols];
     Arrays.fill(chars, ' ');
     return String.valueOf(chars);

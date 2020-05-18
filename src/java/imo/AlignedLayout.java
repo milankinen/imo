@@ -102,11 +102,11 @@ public class AlignedLayout extends Layout {
 
   @Override
   public void print(StringBuilder sb, int offset) {
-    String indentation = Util.indentation(offset);
+    String alignment = Util.spaces(offset);
     ((Layout) _children.nth(0)).print(sb, offset);
     for (int i = 1, n = _children.count(); i < n; i++) {
       sb.append('\n');
-      sb.append(indentation);
+      sb.append(alignment);
       ((Layout) _children.nth(i)).print(sb, offset);
     }
   }

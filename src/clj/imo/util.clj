@@ -1,6 +1,6 @@
 (ns imo.util
   (:require [clojure.string :as string])
-  (:import (imo AstNode)))
+  (:import (imo AstNode Util)))
 
 (defn split-lines
   "Like string/split-lines but handles also special case where
@@ -8,6 +8,12 @@
   [s]
   {:pre [(string? s)]}
   (string/split s #"\n" -1))
+
+(defn spaces [n]
+  {:pre [(nat-int? n)]}
+  (if (pos-int? n)
+    (Util/spaces n)
+    ""))
 
 (defn node? [x]
   (and (vector? x)
