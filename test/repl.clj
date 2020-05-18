@@ -1,32 +1,49 @@
 (ns repl
   (:require [imo.reader :as reader]
             [imo.analysis :as analysis]
+            [imo.main :refer [-main *exit-jvm*]]
             [imo.logger :refer [timed] :as logger]
             [imo.test-utils :refer [load-test-file]]
+            [imo.util :refer [node?]]
             [clojure.string :as string]
             [clojure.walk :refer [postwalk]]
-            [clojure.pprint :as pp]
-            [imo.config :as config]))
-
-(set! *warn-on-reflection* true)
+            [clojure.pprint :as pp]))
 
 (alter-var-root #'logger/*log-level* (constantly 5))
 
-(defn ast [s]
+(defn format-project!
+  "Formats the entire project files"
+  []
+  (binding [*exit-jvm* false]
+    (-main "--config-edn" "{:cache false}"
+           "test/**/*.clj"
+           "src/**/*.clj"
+           "!test/__files__/*")))
+
+(defn ast
+  "Reads and and analyzes an ast from the given source string"
+  [s]
   (->> (string/split-lines s)
        (map #(string/replace % #"^\s*\|" ""))
        (string/join "\n")
        (reader/read-ast)
        (analysis/analyze-ast)))
 
-(defmacro ast* [& body]
+(defmacro ast*
+  "Reads and analyzes an ast from the given forms"
+  [& body]
   `(->> ~(vec (map str body))
         (string/join "\n")
         (ast)))
 
-(def ^:dynamic *print-all* false)
+(def ^:dynamic *print-all*
+  "Set to `true` to print **all** ast data with `pr-ast`"
+  false)
 
-(defn pr-ast [ast]
+(defn pr-ast
+  "Prints data and metadata from the given ast node"
+  [ast]
+  {:pre [(node? ast)]}
   ; pprint does not support meta so extract it and place
   ; it to the beginning of ast node
   (letfn [(process-meta [m]

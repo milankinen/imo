@@ -36,4 +36,5 @@
                             ["clean"]
                             ["uberjar"]
                             ["shell" "./scripts/build_native_image.sh"]]
-            "linux-image"  ["shell" "./scripts/build_linux_image_with_docker.sh"]})
+            "linux-image"  ["shell" "./scripts/build_linux_image_with_docker.sh"]
+            "fmt"          ["with-profile" "+dev,+test" "trampoline" "run" "-m" "repl/format-project!"]})
