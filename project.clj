@@ -18,15 +18,15 @@
   :profiles {:dev     {:jvm-opts     [~(str "-Dimo.version=" :project/version)]
                        :repl-options {:init-ns repl}
                        :global-vars  {*warn-on-reflection* true}}
-             :test    {:dependencies [[eftest "0.5.9"]]
-                       :global-vars  {*warn-on-reflection* false}}
+             :test    {:dependencies [[eftest "0.5.9"]]}
+             :clitest {:global-vars {*warn-on-reflection* false}}
              :uberjar {:global-vars {*assert* false}
                        :jvm-opts    [~(str "-Dimo.version=" :project/version)]
                        :aot         :all}}
   :aliases {"i"            ["do"
                             ["with-profile" "+dev,+test" "deps"]
                             ["with-profile" "+dev,+test" "deps" ":tree"]]
-            "test"         ["with-profile" "+dev,+test" "trampoline" "run" "-m" "imo.test-runner/run-from-cli!"]
+            "test"         ["with-profile" "+dev,+test,+clitest" "trampoline" "run" "-m" "imo.test-runner/run-from-cli!"]
             "t"            "test"
             "native-image" ["do"
                             ["shell" "./scripts/setup_graalvm.sh" ~(-> (System/getProperty "java.version")
