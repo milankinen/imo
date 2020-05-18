@@ -166,13 +166,21 @@
 
 ; Input/output
 
+(defn- abs-path [^File file]
+  (.getAbsolutePath file))
+
 (defn- parse-files-seq [globs]
   (if (= ["-"] globs)
     [[] true]
-    (let [files (->> (mapcat glob/files globs)
-                     (group-by #(.getAbsolutePath ^File %))
+    (let [includes (->> (remove #(string/starts-with? % "!") globs)
+                        (mapcat glob/files))
+          excludes (->> (filter #(string/starts-with? % "!") globs)
+                        (mapcat #(glob/files (subs % 1))))
+          files (->> (map #(vector (abs-path %) %) includes)
+                     (remove (comp (set (map abs-path excludes)) first))
+                     (group-by first)
                      (sort-by first)
-                     (map (comp first second))
+                     (map (comp second first second))
                      (filter #(and (.exists ^File %)
                                    (.isFile ^File %))))]
       (when (empty? files)
@@ -279,7 +287,7 @@
 
 (comment
   (alter-var-root #'*exit-jvm* (constantly false))
+  (-main "--help")
   (-main #_"--check" "-vv" "test/**/*.clj" "src/**/*.clj")
-
 
   '-)
