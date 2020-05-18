@@ -267,6 +267,9 @@
                                   (s/as-analyzer))
         no-doc-str-analyzer (-> (s/seq (s/symbol-node "invocation")
                                        (s/simple-symbol-node "name" as-ns-binding)
+                                       (s/custom (fn [_ ^State input]
+                                                   (let [res (s/state->result input)]
+                                                     (s/with-result input (conj! res nil)))))
                                        (s/? (body-expr-node "value")))
                                 (s/as-analyzer))]
     (fn [ctx [_ & children :as node]]
