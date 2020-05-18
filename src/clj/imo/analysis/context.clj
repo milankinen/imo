@@ -15,6 +15,7 @@
 (defrecord Context
   [^Scope scope
    ^Map aliases
+   ^Map sym-resolution
    ^String current-ns
    ^Keyword mode
    ^Binding recur-target])
@@ -92,10 +93,14 @@
       [(:fq-name binding) binding]
       [local-name nil])))
 
-(defn create-context [root-bindings]
-  (-> {:current-ns   "user"
-       :scope        (->Scope nil root-bindings)
-       :aliases      {}
-       :mode         :eval
-       :recur-target nil}
+(defn create-context
+  [root-bindings symbol-resolution]
+  {:pre [(map? root-bindings)
+         (map? symbol-resolution)]}
+  (-> {:current-ns     "user"
+       :scope          (->Scope nil root-bindings)
+       :aliases        {}
+       :sym-resolution symbol-resolution
+       :mode           :eval
+       :recur-target   nil}
       (map->Context)))

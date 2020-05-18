@@ -2,7 +2,7 @@
   (:require [imo.analysis.core :as a]
             [imo.analysis.context :refer [ctx?] :as ctx]
             [imo.analysis.spec :refer [->Err ->State] :as s]
-            [imo.analysis.ns-publics :as publics]
+            [imo.analysis.built-in :as built-in]
             [imo.logger :refer [timed]]
             [imo.util :refer [node? start-of]])
   (:import (imo.analysis.spec State)))
@@ -63,9 +63,10 @@
            (= :symbol (a/get-node-type ctx i)))
     (let [local-name (symbol (a/get-literal-content ctx i))
           invocation (first (ctx/resolve-fq-name ctx local-name))
-          analyzer (invocation->analyzer invocation)
+          resolve-as (get (:sym-resolution ctx) invocation invocation)
+          analyzer (invocation->analyzer resolve-as)
           [ctx' node'] (analyzer ctx node)]
-      [ctx' (vary-meta node' assoc :invocation invocation)])
+      [ctx' (vary-meta node' assoc :invocation invocation :resolve-as resolve-as)])
     (a/default-analyzer ctx node)))
 
 (defmethod a/default-node-analyzer :symbol [ctx [_ content :as node]]
@@ -288,7 +289,7 @@
         fn-analyzer (s/as-analyzer fn-spec)
         letfn-analyzer (s/as-analyzer letfn-spec)
         for-analyzer (s/as-analyzer for-spec)
-        do***-analyzer (s/as-analyzer do***-spec)]
+        doseq-analyzer (s/as-analyzer do***-spec)]
     (fn [invocation]
       (case invocation
         def def-form-analyzer
@@ -297,13 +298,16 @@
         quote quote-analyzer
         clojure.core/let let-analyzer
         clojure.core/defn defn-analyzer
-        clojure.core/defn- defn-analyzer
         clojure.core/fn fn-analyzer
         clojure.core/letfn letfn-analyzer
         clojure.core/for for-analyzer
-        clojure.core/doseq do***-analyzer
-        clojure.core/dotimes do***-analyzer
+        clojure.core/doseq doseq-analyzer
         a/default-analyzer))))
+
+(defn- create-clj-context []
+  (let [bindings (a/exports->bindings built-in/clojure-core-exports)
+        sym-resolution built-in/clojure-core-symbol-resolution]
+    (ctx/create-context bindings sym-resolution)))
 
 ;;
 ;;
@@ -315,6 +319,6 @@
   {:pre [(node? ast)
          (= :$ (first ast))]}
   (timed "analysis"
-    (let [ctx (ctx/create-context (a/publics->bindings publics/clojure-core))]
+    (let [ctx (create-clj-context)]
       (-> (a/analyze-with a/default-node-analyzer ctx ast)
           (second)))))

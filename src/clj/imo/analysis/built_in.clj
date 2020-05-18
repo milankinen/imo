@@ -1,6 +1,6 @@
-(ns imo.analysis.ns-publics)
+(ns imo.analysis.built-in)
 
-(def clojure-core
+(def clojure-core-exports
   '[clojure.core/primitives-classnames
     clojure.core/+'
     clojure.core/decimal?
@@ -660,3 +660,8 @@
     clojure.core/denominator
     clojure.core/bytes
     clojure.core/refer-clojure])
+
+(def clojure-core-symbol-resolution
+  '{clojure.core/defonce def
+    clojure.core/defn-   clojure.core/defn
+    clojure.core/dotimes clojure.core/doseq})

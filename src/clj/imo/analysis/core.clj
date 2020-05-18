@@ -101,7 +101,7 @@
 (defn get-literal-content [ctx node]
   (second node))
 
-(defn publics->bindings [publics]
+(defn exports->bindings [publics]
   (loop [res (transient {})
          [fq-name :as rem] (seq publics)]
     (if (some? rem)
