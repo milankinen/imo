@@ -27,7 +27,8 @@
   [["-h" "--help" "Show help"]
    ["-c" "--config-file FILE" "Path to configuration file, defaults to imo.edn"]
    [nil "--config-edn EDN" "Overrides to the configuration with EDN string"]
-   [nil "--check" "Run IMO in check mode and report unformatted files as failures"]
+   [nil "--check" "Check mode -- check that files are formatted and report unformatted files"]
+   [nil "--show-diff" "Show visual diff between actual and expected formatting (in check mode only)"]
    ["-v" nil "Increment verbosity level (-v or -vv or -vvv)"
     :id :verbosity
     :default 0
@@ -214,7 +215,7 @@
       "\n")
     0))
 
-(defn- check-files! [config inputs+outputs]
+(defn- check-files! [config inputs+outputs show-diff?]
   (let [n-total (count inputs+outputs)
         n-failed (atom 0)
         n-cached (atom 0)
@@ -231,10 +232,11 @@
                     failed? (not= src-in src-out)]
                 (when failed?
                   (binding [*out* *err*]
-                    (println (str "ERROR " name ": check failed")))
+                    (println (str "ERROR " name ": check failed"))
+                    (when show-diff?
+                      (println (imo/diff src-out src-in))))
                   (swap! n-failed inc))))))))
     (print-out
-      (if (pos-int? @n-failed) "\n" "")
       (format "Check ready, took %.2f secs" (/ (- (System/nanoTime) start-t) 1000000000.0))
       " \uD83D\uDD0E"
       "\nchecked files: " n-total
@@ -272,7 +274,7 @@
                         logger/*log-level* log-level]
                 (vv "using config: " config)
                 (if check-mode?
-                  (check-files! config inputs+outputs)
+                  (check-files! config inputs+outputs (boolean (:show-diff options)))
                   (format-files! config inputs+outputs))))
             (exit))))
     (catch ImoException ex
