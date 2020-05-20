@@ -272,12 +272,28 @@
 (def any-node
   (make-shorthand :any default-node-analyzer))
 
-(def simple-symbol-node
-  (letfn [(post-analyzer [ctx [_ content :as node]]
-            (when-not (simple-symbol? (symbol content))
-              (throw (analysis-ex (start-of node) (str "expected " name " to be simple symbol"))))
-            [ctx node])]
-    (make-shorthand :symbol (composed-analyzer default-node-analyzer post-analyzer))))
+(defn simple-symbol-node
+  ([spec-name] (simple-symbol-node spec-name nil))
+  ([spec-name post-analyzer]
+   {:pre [(string? spec-name)
+          (or (nil? post-analyzer)
+              (ifn? post-analyzer))]}
+   (let [analyzer (composed-analyzer default-node-analyzer post-analyzer)]
+     (reify Spec
+       (name [_] spec-name)
+       (run [_ parent input _]
+         (let [ctx (state->ctx ^State input)
+               rem (state->remaining ^State input)
+               res (state->result ^State input)
+               node (first rem)]
+           (cond
+             (nil? node)
+             (->Err (end-of parent) (str "expected " spec-name))
+             (and (= :symbol (get-node-type ctx node))
+                  (simple-symbol? (symbol (get-literal-content ctx node))))
+             (let [[ctx' n'] (analyze-with analyzer ctx node)]
+               (State. ctx' (next rem) (conj! res n')))
+             :else (->Err (start-of node) (str "expected " spec-name " to be simple symbol")))))))))
 
 (def symbol-node
   (make-shorthand :symbol default-node-analyzer))
