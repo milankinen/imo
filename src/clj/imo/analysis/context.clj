@@ -1,4 +1,5 @@
 (ns imo.analysis.context
+  (:refer-clojure :exclude [in-ns])
   (:import (clojure.lang Symbol Keyword)
            (java.util Map)))
 
@@ -79,7 +80,8 @@
             :else nil))))
 
 (defn resolve-alias [{:keys [aliases] :as ctx} alias]
-  {:pre [(ctx? ctx)]}
+  {:pre [(ctx? ctx)
+         (string? alias)]}
   (get aliases alias))
 
 (defn resolve-fq-name [ctx local-name]
@@ -93,14 +95,29 @@
       [(:fq-name binding) binding]
       [local-name nil])))
 
+(defn- indexed-bindings [bindings]
+  (into {} (map (fn [b] [(name (:local-name b)) b]) bindings)))
+
 (defn create-context
   [root-bindings symbol-resolution]
-  {:pre [(map? root-bindings)
+  {:pre [(coll? root-bindings)
+         (every? #(instance? Binding %) root-bindings)
          (map? symbol-resolution)]}
   (-> {:current-ns     "user"
-       :scope          (->Scope nil root-bindings)
+       :scope          (->Scope nil (indexed-bindings root-bindings))
        :aliases        {}
        :sym-resolution symbol-resolution
        :mode           :eval
        :recur-target   nil}
       (map->Context)))
+
+(defn in-ns [ctx ns-name aliases bindings]
+  {:pre [(ctx? ctx)
+         (string? ns-name)
+         (coll? aliases)
+         (every? #(instance? Alias %) aliases)
+         (coll? bindings)
+         (every? #(instance? Binding %) bindings)]}
+  (assoc ctx :current-ns ns-name
+             :scope (->Scope nil (indexed-bindings bindings))
+             :aliases (into {} (map (fn [a] [(name (:local-name a)) a]) aliases))))

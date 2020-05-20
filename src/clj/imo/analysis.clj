@@ -3,9 +3,15 @@
             [imo.analysis.context :refer [ctx?] :as ctx]
             [imo.analysis.spec :refer [->Err ->State] :as s]
             [imo.analysis.built-in :as built-in]
-            [imo.logger :refer [timed]]
-            [imo.util :refer [node? start-of]])
+            [imo.logger :refer [timed warn]]
+            [imo.util :refer [node? start-of]]
+            [clojure.string :as string])
   (:import (imo.analysis.spec State)))
+
+(def ^:private built-in-exports
+  {'clojure.core built-in/clojure-core-exports})
+
+(def ^:private ^:dynamic *exports* built-in-exports)
 
 ;; Utils
 
@@ -283,6 +289,246 @@
          (body-expr-node "then")
          (s/? (body-expr-node "else"))))
 
+(def ^:private ns-require-spec
+  (let [== (fn [s] (fn [_ [_ content]] (= s content)))
+        as-spec (s/seq (s/keyword-node ":as")
+                       (s/simple-symbol-node "alias"))
+        mark-renames (fn [ctx node]
+                       (let [renames (-> (next node)
+                                         (map (comp symbol second))
+                                         (partition-all 2)
+                                         (map vec)
+                                         (into {}))]
+                         [ctx (vary-meta node :rename renames)]))
+        rename-spec (s/seq (s/keyword-node ":rename")
+                           (s/node :map "renamings"
+                             (-> (s/* (s/seq (s/simple-symbol-node "old-name")
+                                             (s/simple-symbol-node "new-name")))
+                                 (s/as-analyzer mark-renames))))
+        mark-as-refer (fn [ctx node]
+                        [ctx (vary-meta node assoc :refer (symbol (second node)))])
+        refered-sym-spec (s/simple-symbol-node "refered-symbol" mark-as-refer)
+        collect-vec-refers (fn [ctx node]
+                             (let [refers (set (map (comp :refer meta) (next node)))]
+                               [ctx (vary-meta node assoc :refer refers)]))
+        refer-vec-spec (s/node :vector "refers" (s/as-analyzer (s/* refered-sym-spec) collect-vec-refers))
+        mark-as-refer-all (fn [ctx node] [ctx (vary-meta node assoc :refer :all)])
+        refer-all-spec (s/keyword-node ":all" mark-as-refer-all)
+        refer-spec (s/seq (s/keyword-node ":refer")
+                          (s/choose
+                            (== ":all") refer-all-spec
+                            (type= :vector) refer-vec-spec))
+        collect-vec-libspec (fn [ctx [_ lib-ns & opts :as node]]
+                              (let [lib-ns-sym (symbol (second lib-ns))
+                                    libspec
+                                    (loop [libspec {:namespace lib-ns-sym}
+                                           [[o v] & remaining] (partition 2 opts)]
+                                      (if o
+                                        (recur (case (second o)
+                                                 ":refer" (if-let [refer (:refer (meta v))]
+                                                            (assoc libspec :refer refer)
+                                                            libspec)
+                                                 ":as" (assoc libspec :as (symbol (second v)))
+                                                 ":rename" (if-let [rename (:rename (meta v))]
+                                                             (assoc libspec :rename rename)
+                                                             libspec))
+                                               remaining)
+                                        (update libspec
+                                                :refer #(if (= % :all)
+                                                          (or (get *exports* lib-ns-sym)
+                                                              (warn nil "couldn't find :all exports for " lib-ns-sym))
+                                                          %))))]
+                                [ctx (vary-meta node assoc :libspec libspec)]))
+        vec-libspec (s/node :vector "libspec"
+                      (-> (s/seq (s/simple-symbol-node "lib")
+                                 (s/* (s/choose
+                                        (== ":refer") refer-spec
+                                        (== ":rename") rename-spec
+                                        (== ":as") as-spec)))
+                          (s/as-analyzer collect-vec-libspec)))
+        collect-sym-libspec (fn [ctx node]
+                              (let [libspec {:namespace (symbol (second node))}]
+                                [ctx (vary-meta node assoc :libspec libspec)]))
+        sym-libspec (s/simple-symbol-node "libname" collect-sym-libspec)
+        collect-prefix-list (fn [ctx [_ prefix-node & libspec-nodes :as node]]
+                              (let [prefix (str (second prefix-node) ".")
+                                    libspecs (->> (map (comp :libspec meta) libspec-nodes)
+                                                  (map (fn [libspec]
+                                                         (update libspec :namespace #(symbol (str prefix %))))))]
+                                [ctx (vary-meta node assoc :libspecs libspecs)]))
+        prefix-list (s/node :list "prefix-list"
+                      (-> (s/seq (s/simple-symbol-node "prefix")
+                                 (s/+ (s/choose
+                                        (type= :vector) vec-libspec
+                                        (type= :symbol) sym-libspec)))
+                          (s/as-analyzer collect-prefix-list)))
+        flag (s/keyword-node "flag" (fn [ctx node] [ctx (vary-meta node assoc :flag (symbol (second node)))]))]
+    (s/seq (s/keyword-node ":require")
+           (s/+ (s/choose
+                  (type= :vector) vec-libspec
+                  (type= :symbol) sym-libspec
+                  (type= :list) prefix-list
+                  (type= :keyword) flag)))))
+
+(def ^:private ns-refer-clojure-spec
+  (let [== (fn [s] (fn [_ [_ content]] (= s content)))
+        syms-as (fn [key]
+                  (fn [ctx [_ & children :as node]]
+                    (let [syms (map (comp symbol second) children)]
+                      [ctx (vary-meta node assoc key syms)])))
+        only-spec (s/seq (s/keyword-node ":only")
+                         (s/node :vector "requires"
+                           (-> (s/* (s/simple-symbol-node "require"))
+                               (s/as-analyzer (syms-as :only)))))
+        exclude-spec (s/seq (s/keyword-node ":exclude")
+                            (s/node :vector "requires"
+                              (-> (s/* (s/simple-symbol-node "require"))
+                                  (s/as-analyzer (syms-as :exclude)))))
+        rename-spec (s/seq (s/keyword-node ":rename")
+                           (s/node :map "renames"
+                             (-> (s/* (s/seq (s/simple-symbol-node "old-name")
+                                             (s/simple-symbol-node "new-name")))
+                                 (s/as-analyzer (fn [ctx [_ & children :as node]]
+                                                  (let [renames (->> (map (comp symbol second) children)
+                                                                     (partition 2)
+                                                                     (map vec)
+                                                                     (into {}))]
+                                                    [ctx (vary-meta node assoc :rename renames)]))))))]
+    (s/seq (s/keyword-node ":refer-clojure")
+           (s/* (s/choose
+                  (== ":only") only-spec
+                  (== ":exclude") exclude-spec
+                  (== ":rename") rename-spec)))))
+
+
+(def ^:private ns-import-spec
+  (let [single-class-spec (s/simple-symbol-node
+                            "class-name"
+                            (fn [ctx node]
+                              (let [parts (string/split (second node) #"\.")
+                                    [pkg cls] (if (= 1 (count parts))
+                                                [nil (first parts)]
+                                                [(string/join "." (pop parts))
+                                                 (peek parts)])
+                                    import {:package pkg
+                                            :class   cls}]
+                                [ctx (vary-meta node assoc :imports [import])])))
+        class-list-spec (s/node :list "package-list"
+                          (-> (s/seq (s/simple-symbol-node "package-name")
+                                     (s/+ (s/simple-symbol-node "")))
+                              (s/as-analyzer
+                                (fn [ctx [_ pkg-node & class-nodes :as node]]
+                                  (let [pkg (second pkg-node)
+                                        classes (map second class-nodes)
+                                        imports (map (fn [c] {:package pkg :class c}) classes)]
+                                    [ctx (vary-meta node assoc :imports imports)])))))]
+    (s/seq (s/keyword-node ":import")
+           (s/* (s/choose
+                  (type= :symbol) single-class-spec
+                  (type= :list) class-list-spec)))))
+
+(def ^:private ns-use-spec
+  (s/seq (s/keyword-node ":use")
+         (s/custom (fn [parent input]
+                     (warn (start-of parent) ":use is not supported (at least for now), use :require instead")
+                     input))
+         (s/* (s/any-node "libspec"))))
+
+(def ^:private ns-gen-class-spec
+  (s/seq (s/keyword-node ":gen-class")
+         (s/* (s/any-node "option"))))
+
+(def ^:private ns-load-spec
+  (s/seq (s/keyword-node ":load")
+         (s/* (s/string-node "lib"))))
+
+(def ^:private ns-refer-spec
+  (s/seq (s/keyword-node ":refer")
+         (s/simple-symbol-node "lib")
+         (s/custom (fn [parent input]
+                     (warn (start-of parent) ":refer is not supported (at least for now)")
+                     input))
+         (s/* (s/any-node "filter"))))
+
+(def ^:private ns-clause-analyzer
+  (let [== (fn [s] (fn [_ [_ content]] (= s content)))
+        collect-meta (fn [ctx [_ clause & args :as node]]
+                       [ctx (case (second clause)
+                              nil node
+                              ":require" (let [requires (mapcat
+                                                          #(let [m (meta %)]
+                                                             (cond
+                                                               (:libspecs m) (:libspecs m)
+                                                               (:libspec m) [(:libspec m)]
+                                                               :else nil))
+                                                          args)]
+                                           (vary-meta node assoc :clause :require :requires requires))
+                              ":refer-clojure" (let [spec (->> (map #(select-keys (meta %) [:only :exclude :rename]) args)
+                                                               (reduce merge {}))]
+                                                 (vary-meta node assoc :clause :refer-clojure :spec spec))
+                              ":import" (let [imports (mapcat (comp :imports meta) args)]
+                                          (vary-meta node assoc :clause :import :imports imports))
+                              (let [clause (keyword (subs (second clause) 1))]
+                                (vary-meta node assoc :clause clause)))])]
+    (-> (s/choose
+          (== ":require") ns-require-spec
+          (== ":refer-clojure") ns-refer-clojure-spec
+          (== ":import") ns-import-spec
+          (== ":gen-class") ns-gen-class-spec
+          (== ":use") ns-use-spec
+          (== ":refer") ns-refer-spec
+          (== ":load") ns-load-spec)
+        (s/as-analyzer collect-meta))))
+
+(def ^:private ns-analyzer
+  (letfn [(in-ns [ctx [_ _ ns-name-node _ _ & clause-nodes :as node]]
+            (let [ns-name (second ns-name-node)
+                  requires (mapcat (comp :requires meta) clause-nodes)
+                  aliases (keep (fn [{:keys [alias namespace]}]
+                                  (some-> alias (ctx/create-alias namespace)))
+                                requires)
+                  clj-spec (first (keep #(let [m (meta %)]
+                                           (when (= :refer-clojure (:clause m))
+                                             (:spec m)))
+                                        clause-nodes))
+                  clj-exports (as-> built-in/clojure-core-exports exports
+                                    (if-let [only (seq (:only clj-spec))]
+                                      (filter (comp (set (map name only)) name) exports)
+                                      exports)
+                                    (if-let [exclude (seq (:exclude clj-spec))]
+                                      (remove (comp (set (map name exclude)) name) exports)
+                                      exports)
+                                    (let [rename (or (:rename clj-spec) {})]
+                                      (map #(if-let [local (get rename (symbol (name %)))]
+                                              (ctx/create-binding local %)
+                                              (ctx/create-binding (symbol (name %)) %))
+                                           exports)))
+                  imports (->> (mapcat (comp :imports meta) clause-nodes)
+                               (mapcat (fn [{:keys [package class]}]
+                                         (let [fq-s (if package
+                                                      (str package "." class)
+                                                      class)]
+                                           [; class name
+                                            (ctx/create-binding (symbol class) (symbol fq-s))
+                                            ; ctor
+                                            (ctx/create-binding (symbol (str class "."))
+                                                                (symbol (str fq-s ".")))]))))
+                  bindings (-> (mapcat (fn [{:keys [refer rename namespace]}]
+                                         (map #(let [local-name (get rename % %)
+                                                     fq-name (symbol (str namespace) (str %))]
+                                                 (ctx/create-binding local-name fq-name))
+                                              refer))
+                                       requires)
+                               (concat clj-exports imports))
+                  ctx-in-ns (ctx/in-ns ctx ns-name aliases bindings)]
+              [ctx-in-ns node]))]
+    (-> (s/seq (s/symbol-node "invocation")
+               (s/simple-symbol-node "ns-name")
+               (s/? (s/string-node "doc-string"))
+               (s/? (s/map-node "attr-map"))
+               (s/* (s/node :list "ns-clause" ns-clause-analyzer)))
+        (s/as-analyzer in-ns))))
+
 (def ^:private invocation->analyzer
   (let [if-analyzer (s/as-analyzer if-spec)
         do-analyzer (s/as-analyzer do-spec)
@@ -299,6 +545,7 @@
         if if-analyzer
         do do-analyzer
         quote quote-analyzer
+        clojure.core/ns ns-analyzer
         clojure.core/let let-analyzer
         clojure.core/defn defn-analyzer
         clojure.core/fn fn-analyzer
@@ -308,7 +555,8 @@
         a/default-analyzer))))
 
 (defn- create-clj-context []
-  (let [bindings (a/exports->bindings built-in/clojure-core-exports)
+  (let [bindings (->> built-in/clojure-core-exports
+                      (map #(ctx/create-binding (symbol (name %)) %)))
         sym-resolution built-in/clojure-core-symbol-resolution]
     (ctx/create-context bindings sym-resolution)))
 

@@ -28,7 +28,8 @@
   (doseq [x xs]
     (print* x))
   (print* "\n")
-  (flush))
+  (flush)
+  nil)
 
 ;;
 ;; Public stuff

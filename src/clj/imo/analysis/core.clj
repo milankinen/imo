@@ -100,12 +100,3 @@
 
 (defn get-literal-content [ctx node]
   (second node))
-
-(defn exports->bindings [publics]
-  (loop [res (transient {})
-         [fq-name :as rem] (seq publics)]
-    (if (some? rem)
-      (let [b (create-binding (symbol (name fq-name)) fq-name)]
-        (recur (assoc! res (name fq-name) b)
-               (next rem)))
-      (persistent! res))))
