@@ -4,16 +4,16 @@
             [imo.logger :refer [warn]])
   (:import (imo AnalysisException)))
 
-(defn analysis-ex [{:keys [line col]} msg & rest]
-  {:pre [(pos-int? line)
-         (pos-int? col)
-         (string? msg)]}
-  (let [message (apply str (cons msg rest))]
-    (AnalysisException. message line col)))
+(defn analysis-ex [get-position message]
+  {:pre [(ifn? get-position)
+         (string? message)]}
+  (AnalysisException. get-position message))
 
-(defn ex->position [^AnalysisException ex]
-  {:line (.-line ex)
-   :col  (.-col ex)})
+(defn- ex->position [^AnalysisException ex]
+  (let [pos (.getPosition ex)]
+    (assert (pos-int? (:line pos)))
+    (assert (pos-int? (:col pos)))
+    pos))
 
 (declare analyze-with)
 

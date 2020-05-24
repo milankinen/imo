@@ -1,12 +1,16 @@
 package imo;
 
-public class AnalysisException extends RuntimeException {
-  public final int line;
-  public final int col;
+import clojure.lang.IFn;
 
-  public AnalysisException(String message, int line, int col) {
-    super(message);
-    this.line = line;
-    this.col = col;
+public class AnalysisException extends RuntimeException {
+  private final IFn _getPosition;
+
+  public AnalysisException(IFn getPosition, String msg) {
+    super(msg, null, false, false);
+    this._getPosition = getPosition;
+  }
+
+  public Object getPosition() {
+    return _getPosition.invoke();
   }
 }

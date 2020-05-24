@@ -48,11 +48,12 @@
     (= expected-type (a/get-node-type ctx node))))
 
 (defn- is-exactly [expected-type expected-value]
-  (fn [parent ^State input]
-    (let [[type value :as node] (s/state->next-node input)]
-      (when (or (not= expected-type type)
-                (not= expected-value value))
-        (s/error parent node (format "expected '%s'" (str value)))))))
+  (let [err-msg (format "expected '%s'" (str expected-value))]
+    (fn [parent ^State input]
+      (let [[type value :as node] (s/state->next-node input)]
+        (when (or (not= expected-type type)
+                  (not= expected-value value))
+          (s/error parent node err-msg))))))
 
 (defn- on-ctx [f]
   {:pre [(fn? f)]}
@@ -188,7 +189,7 @@
   (let [bindings-analyzer (s/as-analyzer (s/* binding-spec))
         analyzer (fn [ctx [_ & children :as node]]
                    (when-not (even? (count children))
-                     (throw (a/analysis-ex (start-of node) "bindings must contain even number of forms")))
+                     (throw (a/analysis-ex #(start-of node) "bindings must contain even number of forms")))
                    (bindings-analyzer ctx node))]
     (s/node :vector "bindings" analyzer)))
 

@@ -7,7 +7,7 @@
                                        get-node-type
                                        get-literal-content]]
             [imo.util :refer [start-of end-of]])
-  (:import (clojure.lang IDeref)))
+  (:import (clojure.lang IDeref IFn)))
 
 ;; Utils
 
@@ -57,13 +57,13 @@
   (name [])
   (run [node input last?]))
 
-(defrecord Err [position message])
+(defrecord Err [^IFn get-position ^String message])
 
 (defn error [parent node message]
-  (let [position (if (some? node)
-                   (start-of node)
-                   (end-of parent))]
-    (->Err position message)))
+  (->Err #(if (some? node)
+            (start-of node)
+            (end-of parent))
+         message))
 
 (defn ^{:inline (fn [x] `(instance? Err ~x))}
   error? [x]
@@ -171,12 +171,13 @@
         preds+specs (if (odd? (count preds+specs))
                       (doall (butlast preds+specs))
                       (doall preds+specs))
-        specs (mapv second (partition-all 2 preds+specs))]
+        specs (mapv second (partition-all 2 preds+specs))
+        err-msg (delay (str "expected one of: " (string/join ", " (sort (set (keep spec->name specs))))))]
     (assert (every? spec? specs))
     (assert (or (nil? default) (spec? default)))
     (reify Spec
-      (name [_] (str "one of: " (string/join ", " (keep spec->name specs))))
-      (run [this parent input last?]
+      (name [_] (str "one of: " (string/join ", " (sort (set (keep spec->name specs))))))
+      (run [_ parent input last?]
         (let [ctx (state->ctx ^State input)
               tested (first (state->remaining ^State input))]
           (loop [[pred spec & xs] preds+specs]
@@ -186,13 +187,12 @@
                 (recur xs))
               (if (some? default)
                 (.run ^Spec default parent input last?)
-                (error parent tested (str "expected " (spec->name this)))))))))))
+                (error parent tested @err-msg)))))))))
 
 (defn recursive [spec]
   {:pre [(instance? IDeref spec)]}
   (reify Spec
     (name [_]
-      (assert (spec? @spec))
       (spec->name @spec))
     (run [_ parent input last?]
       (assert (spec? @spec))
@@ -209,12 +209,12 @@
   (let [input (State. ctx children (transient [node-type]))
         output (.run spec node input true)]
     (if (error? output)
-      (throw (analysis-ex (:position output) (:message output)))
+      (throw (analysis-ex (:get-position output) (:message output)))
       (let [ctx' (state->ctx ^State output)
             rem (state->remaining ^State output)
             res (state->result ^State output)]
         (if-let [extra (first rem)]
-          (throw (analysis-ex (start-of extra) "no more forms expected"))
+          (throw (analysis-ex #(start-of extra) "no more forms expected"))
           [ctx' (persistent! res)])))))
 
 (defn- composed-analyzer [analyzer post-analyzer]
@@ -242,21 +242,24 @@
          (or (spec? spec-or-analyzer)
              (ifn? spec-or-analyzer))]}
   (let [analyzer (if (spec? spec-or-analyzer) (as-analyzer spec-or-analyzer) spec-or-analyzer)
-        any-node? (= :any expected-type)]
+        any-node? (= :any expected-type)
+        err-msg-nil (str "expected " spec-name)
+        err-msg-other (str "expected " spec-name " to be " expected-type)]
     (reify Spec
       (name [_] spec-name)
       (run [_ parent input _]
         (let [ctx (state->ctx ^State input)
               rem (state->remaining ^State input)
               res (state->result ^State input)
-              node (first rem)]
+              node (first rem)
+              node-type (first node)]
           (cond
-            (nil? node)
-            (->Err (end-of parent) (str "expected " spec-name))
-            (or any-node? (= expected-type (get-node-type ctx node)))
+            (nil? node-type)
+            (->Err #(end-of parent) err-msg-nil)
+            (or any-node? (= expected-type node-type))
             (let [[ctx' n'] (analyze-with analyzer ctx node)]
               (State. ctx' (next rem) (conj! res n')))
-            :else (->Err (start-of node) (str "expected " spec-name " to be " expected-type))))))))
+            :else (->Err #(start-of node) err-msg-other)))))))
 
 ;; Shorthand specs
 
@@ -278,22 +281,25 @@
    {:pre [(string? spec-name)
           (or (nil? post-analyzer)
               (ifn? post-analyzer))]}
-   (let [analyzer (composed-analyzer default-node-analyzer post-analyzer)]
+   (let [analyzer (composed-analyzer default-node-analyzer post-analyzer)
+         err-msg-nil (str "expected " spec-name)
+         err-msg-other (str "expected " spec-name " to be simple symbol")]
      (reify Spec
        (name [_] spec-name)
        (run [_ parent input _]
          (let [ctx (state->ctx ^State input)
                rem (state->remaining ^State input)
                res (state->result ^State input)
-               node (first rem)]
+               node (first rem)
+               node-type (first node)]
            (cond
-             (nil? node)
-             (->Err (end-of parent) (str "expected " spec-name))
-             (and (= :symbol (get-node-type ctx node))
+             (nil? node-type)
+             (->Err #(end-of parent) err-msg-nil)
+             (and (= :symbol node-type)
                   (simple-symbol? (symbol (get-literal-content ctx node))))
              (let [[ctx' n'] (analyze-with analyzer ctx node)]
                (State. ctx' (next rem) (conj! res n')))
-             :else (->Err (start-of node) (str "expected " spec-name " to be simple symbol")))))))))
+             :else (->Err #(start-of node) err-msg-other))))))))
 
 (def symbol-node
   (make-shorthand :symbol default-node-analyzer))
