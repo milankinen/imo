@@ -198,9 +198,8 @@
             [:tagged-literal [:symbol "tagged"] [:string "\"literal\""]]
             [:anon-fn [:symbol "lol"] [:symbol "%"]]
             [:reader-cond [:list [:keyword ":clj"] [:number "123"]]]
-            [:reader-cond
-             [:deref
-              [:list [:keyword ":clj"] [:vector [:number "1"] [:number "2"]]]]]
+            [:reader-cond-splice
+             [:list [:keyword ":clj"] [:vector [:number "1"] [:number "2"]]]]
             [:symbolic-val [:symbol "Inf"]]]
            (read "| #tagged \"literal\"
                   | #(lol %)

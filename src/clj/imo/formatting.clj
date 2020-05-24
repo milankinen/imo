@@ -19,6 +19,7 @@
    :number
    :quote
    :reader-cond
+   :reader-cond-splice
    :regex
    :set
    :string

@@ -79,6 +79,10 @@ public final class AstNode {
     return new AstNode(line, col, READER_COND, List.of(inner));
   }
 
+  public static AstNode createReaderCondSplice(int line, int col, AstNode inner) {
+    return new AstNode(line, col, READER_COND_SPLICE, List.of(inner));
+  }
+
   public static AstNode createSymbolicVal(int line, int col, AstNode inner) {
     return new AstNode(line, col, SYMBOLIC_VAL, List.of(inner));
   }
@@ -147,13 +151,13 @@ public final class AstNode {
     _beginChars.put(META, "^");
     _beginChars.put(DISCARD, "#_");
     _beginChars.put(READER_COND, "#?");
+    _beginChars.put(READER_COND_SPLICE, "#?@");
     _beginChars.put(SYMBOLIC_VAL, "##");
 
     _endChars.put(LIST, ")");
     _endChars.put(VECTOR, "]");
     _endChars.put(MAP, "}");
     _endChars.put(SET, "}");
-    ;
     _endChars.put(ANON_FN, ")");
   }
 

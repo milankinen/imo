@@ -16,6 +16,7 @@ public interface Keywords {
   Keyword UNQUOTE_SPLICE = Keyword.intern("unquote-splice");
   Keyword DISCARD = Keyword.intern("discard");
   Keyword READER_COND = Keyword.intern("reader-cond");
+  Keyword READER_COND_SPLICE = Keyword.intern("reader-cond-splice");
   Keyword SYMBOLIC_VAL = Keyword.intern("symbolic-val");
   Keyword ROOT = Keyword.intern("$");
   Keyword LIST = Keyword.intern("list");

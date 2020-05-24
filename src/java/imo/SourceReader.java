@@ -462,10 +462,10 @@ public class SourceReader {
     if (!LIST.equals(next.type)) {
       throw new ReaderException("Expecting list after reader conditional");
     }
-    if (splice) {
-      next = createDeref(line, col + 2, next);
-    }
-    return handleNode(createReaderCond(line, col, next));
+    AstNode readerCond = splice
+        ? createReaderCondSplice(line, col, next)
+        : createReaderCond(line, col, next);
+    return handleNode(readerCond);
   }
 
   private AstNode readQuoteNode(int line, int col) {
