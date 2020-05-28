@@ -94,12 +94,12 @@
   (assoc ctx :recur-target target))
 
 (defn resolve-binding
-  "Resolves binding based on it's local name string"
-  [{:keys [scope] :as ctx} local-name-s]
+  "Resolves binding based on it's local name"
+  [{:keys [scope] :as ctx} local-name]
   {:pre [(ctx? ctx)
-         (string? local-name-s)]}
+         (simple-symbol? local-name)]}
   (loop [{:keys [bindings parent]} scope]
-    (let [b (get bindings local-name-s)]
+    (let [b (get bindings (name local-name))]
       (cond (some? b) b
             (some? parent) (recur parent)
             :else nil))))
@@ -123,7 +123,7 @@
     (if-let [alias (resolve-alias ctx ns)]
       [(symbol (name (:target-ns alias)) (name local-name)) alias]
       [local-name nil])
-    (if-let [binding (resolve-binding ctx (name local-name))]
+    (if-let [binding (resolve-binding ctx local-name)]
       [(:fq-name binding) binding]
       [local-name nil])))
 
