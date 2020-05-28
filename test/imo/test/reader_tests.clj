@@ -2,12 +2,12 @@
   (:refer-clojure :exclude [read])
   (:require [clojure.test :refer :all]
             [imo.test-utils :refer [src inspect]]
-            [imo.reader :refer [read-ast]]))
+            [imo.core :as imo]))
 
 (defn- read
   ([s] (read s {}))
   ([s {:keys [meta? tab-size] :or {meta? true tab-size 2} :as opts}]
-   (as-> (read-ast (src s) tab-size) ast
+   (as-> (imo/read (src s) tab-size) ast
          (if meta?
            (inspect ast opts)
            ast))))

@@ -1,13 +1,13 @@
 (ns repl
-  (:require [imo.reader :as reader]
-            [imo.analysis :as analysis]
-            [imo.main :refer [-main *exit-jvm*]]
+  (:require [imo.main :refer [-main *exit-jvm*]]
+            [imo.core :as imo]
             [imo.logger :refer [timed] :as logger]
             [imo.test-utils :refer [load-test-file]]
             [imo.util :refer [node?]]
             [clojure.string :as string]
             [clojure.walk :refer [postwalk]]
-            [clojure.pprint :as pp]))
+            [clojure.pprint :as pp]
+            [imo.config :as config]))
 
 (alter-var-root #'logger/*log-level* (constantly 5))
 
@@ -26,8 +26,8 @@
   (->> (string/split-lines s)
        (map #(string/replace % #"^\s*\|" ""))
        (string/join "\n")
-       (reader/read-ast)
-       (analysis/analyze-ast)))
+       (imo/read)
+       (imo/analyze config/defaults)))
 
 (defmacro ast*
   "Reads and analyzes an ast from the given forms"

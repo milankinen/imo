@@ -26,6 +26,11 @@ public class Util {
     }
   }
 
+  public static boolean isSimpleSymbolStr(String s) {
+    int i = s.indexOf('/');
+    return i == -1 || "/".equals(s);
+  }
+
   public static String spaces(int cols) {
     char[] chars = new char[cols];
     Arrays.fill(chars, ' ');

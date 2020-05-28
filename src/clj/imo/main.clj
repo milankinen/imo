@@ -188,6 +188,11 @@
         (throw (imo-ex ["No matching files found"])))
       [files false])))
 
+(defn- format-source [config src-in]
+  (->> (imo/read src-in)
+       (imo/analyze config)
+       (imo/format config)))
+
 (defn- format-files! [config inputs+outputs]
   (let [n-total (count inputs+outputs)
         n-cached (atom 0)
@@ -201,7 +206,7 @@
             (if (cached? cache in src-in)
               (do (v "found from cached, skipping")
                   (swap! n-cached inc))
-              (let [src-out (imo/format-source config src-in)]
+              (let [src-out (format-source config src-in)]
                 (when-not (= src-out src-in)
                   (spit out src-out)
                   (swap! n-changed inc))
@@ -228,7 +233,7 @@
             (if (cached? cache in src-in)
               (do (v "found from cached, skipping")
                   (swap! n-cached inc))
-              (let [src-out (imo/format-source config src-in)
+              (let [src-out (format-source config src-in)
                     failed? (not= src-in src-out)]
                 (when failed?
                   (binding [*out* *err*]

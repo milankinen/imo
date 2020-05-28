@@ -1,25 +1,52 @@
 (ns imo.core
-  (:require [imo.reader :as reader]
-            [imo.analysis :as analysis]
-            [imo.formatting :as formatting]
-            [imo.util :refer [split-lines]])
+  (:refer-clojure :exclude [read format])
+  (:require [imo.analysis :refer [create-context analyze-with default-node-analyzer]]
+            [imo.layout :refer [format-root]]
+            [imo.logger :refer [timed]]
+            [imo.util :refer [node? split-lines]]
+            [imo.forms])
   (:import (java.util LinkedList)
-           (com.github.difflib DiffUtils UnifiedDiffUtils)))
+           (com.github.difflib DiffUtils UnifiedDiffUtils)
+           (imo SourceReader)))
 
-(defn format-source [config input]
-  {:pre  [(string? input)
-          (map? config)]
+(defn read
+  "Reads the CLJ(S) source string and returns AST in vector form
+  [node-type & children]
+
+  If the source can't be readed (it contains e.g. syntax errors),
+  imo.ReaderException will be thrown."
+  ([source] (read source 2))
+  ([source tab-size]
+   {:pre  [(string? source)
+           (pos-int? tab-size)]
+    :post [(node? %)]}
+   (timed "reader"
+     (SourceReader/readAst source tab-size))))
+
+(defn analyze
+  "Runs static analysis to the given input ast and add annotates the returned
+   ast nodes with analysis results"
+  [config ast]
+  {:pre [(node? ast)
+         (= :$ (first ast))]}
+  (timed "analysis"
+    (let [ctx (create-context {} {})]
+      (-> (analyze-with default-node-analyzer ctx ast)
+          (second)))))
+
+(defn format
+  "Formats the given root ast node and returns the formatted source as string"
+  [config ast]
+  {:pre  [(node? ast)
+          (= :$ (first ast))]
    :post [(string? %)]}
-  (->> (reader/read-ast input)
-       (analysis/analyze-ast)
-       (formatting/format-ast config)))
+  (timed "format"
+    (let [width (:width config)]
+      (format-root width ast))))
 
 (defn diff
-  "Returns a string diff from then given expected and actual
-   contents in unified patch format.
-
-   If contents are equal, empty string is returned.
-   "
+  "Returns a string diff from then given expected and actual contents in unified
+   patch format. If contents are equal, empty string is returned."
   [expected actual]
   {:pre [(string? expected)
          (string? actual)]}

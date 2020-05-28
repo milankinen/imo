@@ -1,576 +1,650 @@
 (ns imo.analysis
-  (:require [imo.analysis.core :as a]
-            [imo.analysis.context :refer [ctx?] :as ctx]
-            [imo.analysis.spec :refer [->Err ->State] :as s]
+  (:require [imo.analysis.spec :as s]
             [imo.analysis.built-in :as built-in]
             [imo.logger :refer [timed warn]]
-            [imo.util :refer [node? start-of]]
-            [clojure.string :as string])
-  (:import (imo.analysis.spec State)))
+            [imo.util :refer [node? start-of end-of node->source simple-symbol-str?]])
+  (:import (imo AnalysisException)
+           (clojure.lang Symbol Keyword)
+           (java.util Map)
+           (imo.analysis.spec Acc Spec)))
+
+(defrecord Binding
+  [^Symbol local-name
+   ^Symbol fq-name])
+
+(defrecord Alias
+  [^Symbol local-name
+   ^Symbol target-ns])
+
+(defrecord Scope [parent ^Map bindings])
+
+(defrecord Context
+  [^Scope scope
+   ^Map aliases
+   ^Map sym-resolution
+   ^Map ns-exports
+   ^String current-ns
+   ^Keyword mode
+   ^Binding recur-target])
+
+(defn ctx?
+  "Returns boolean whether the given value is context or not"
+  [x]
+  (instance? Context x))
+
+(defn create-binding
+  "Creates new binding with the given fully qualified and local name"
+  [local-name fq-name]
+  {:pre [(simple-symbol? local-name)
+         (symbol? fq-name)]}
+  (->Binding local-name fq-name))
+
+(defn create-alias
+  "Creates alias pointing to the given namespace"
+  [local-name target-ns]
+  {:pre [(simple-symbol? local-name)
+         (simple-symbol? target-ns)]}
+  (->Alias local-name target-ns))
+
+(defn add-alias
+  "Adds alias to the context and returns the updated context"
+  [{:keys [aliases] :as ctx} alias]
+  {:pre [(instance? Alias alias)
+         (map? aliases)]}
+  (assoc-in ctx [:aliases (name (:local-name alias))] alias))
+
+(defn add-binding
+  "Adds binding to the context's current lexical scope and returns
+   the updated context"
+  [{:keys [scope] :as ctx} b]
+  {:pre  [(instance? Scope scope)
+          (instance? Binding b)]
+   :post [(ctx? %)]}
+  (assoc-in ctx [:scope :bindings (name (:local-name b))] b))
+
+(defn push-lexical-scope
+  "Pushes new lexical scope the the context"
+  [ctx]
+  {:pre  [(ctx? ctx)]
+   :post [(ctx? %)]}
+  (assoc ctx :scope (->Scope (:scope ctx) {})))
+
+(defn pop-lexical-scope
+  "Pops the latest lexical scope and all bindings added on it"
+  [ctx]
+  {:pre  [(ctx? ctx)]
+   :post [(ctx? %)]}
+  (update ctx :scope :parent))
+
+(defn set-mode
+  "Sets new mode to the context and returns the updated context"
+  [ctx mode]
+  {:pre  [(contains? #{:eval :quote :syntax-quote} mode)
+          (ctx? ctx)]
+   :post [(ctx? %)]}
+  (assoc ctx :mode mode))
+
+(defn set-recur-target
+  "Sets new recur target to the context and returns the
+   updated context"
+  [ctx target]
+  {:pre  [(or (instance? Binding target)
+              (nil? target))]
+   :post [(ctx? %)]}
+  (assoc ctx :recur-target target))
+
+(defn resolve-binding
+  "Resolves binding based on it's local name string"
+  [{:keys [scope] :as ctx} local-name-s]
+  {:pre [(ctx? ctx)
+         (string? local-name-s)]}
+  (loop [{:keys [bindings parent]} scope]
+    (let [b (get bindings local-name-s)]
+      (cond (some? b) b
+            (some? parent) (recur parent)
+            :else nil))))
+
+(defn resolve-alias
+  "Resolves alias for the given name"
+  [{:keys [aliases] :as ctx} alias]
+  {:pre [(ctx? ctx)
+         (string? alias)]}
+  (get aliases alias))
+
+(defn resolve-fq-name
+  "Resolves fully qualified name for the given local name
+   and returns a tuple of `[fq-name source]` where source
+   can be either alias or binding or `nil` if fully qualified
+   name can't be resolved"
+  [ctx local-name]
+  {:pre [(ctx? ctx)
+         (symbol? local-name)]}
+  (if-let [ns (namespace local-name)]
+    (if-let [alias (resolve-alias ctx ns)]
+      [(symbol (name (:target-ns alias)) (name local-name)) alias]
+      [local-name nil])
+    (if-let [binding (resolve-binding ctx (name local-name))]
+      [(:fq-name binding) binding]
+      [local-name nil])))
+
+(defn- indexed-bindings [bindings]
+  (into {} (map (fn [b] [(name (:local-name b)) b]) bindings)))
+
+(defn create-context
+  "Creates fresh context with the given custom symbol resolutions
+   and namespace exports"
+  [symbol-resolution ns-exports]
+  {:pre [(map? symbol-resolution)
+         (map? ns-exports)]}
+  (let [bindings (->> built-in/clojure-core-exports
+                      (map #(create-binding % (symbol "clojure.core" (name %))))
+                      (indexed-bindings))]
+    (-> {:current-ns     "user"
+         :scope          (->Scope nil bindings)
+         :aliases        {}
+         :sym-resolution symbol-resolution
+         :mode           :eval
+         :recur-target   nil}
+        (map->Context))))
+
+(defn set-ns
+  "Resets the namespace for the given context"
+  [ctx ns-name aliases bindings]
+  {:pre [(ctx? ctx)
+         (string? ns-name)
+         (coll? aliases)
+         (every? #(instance? Alias %) aliases)
+         (coll? bindings)
+         (every? #(instance? Binding %) bindings)]}
+  (assoc ctx :current-ns ns-name
+             :scope (->Scope nil (indexed-bindings bindings))
+             :aliases (into {} (map (fn [a] [(name (:local-name a)) a]) aliases))))
 
 (def ^:private built-in-exports
   {'clojure.core built-in/clojure-core-exports})
 
-(def ^:private ^:dynamic *exports* built-in-exports)
+(defn get-ns-exports
+  "Returns list of fully qualified exports for the given
+   namespace or `nil` if exports are not known"
+  [ctx ns-name]
+  {:pre [(simple-symbol? ns-name)]}
+  (or (get built-in-exports ns-name)
+      (get (:ns-exports ctx) ns-name)))
 
-;; Utils
+;;
+;; Core analyzers and specs
+;;
 
-(defn- as-ns-binding [ctx node]
+(declare analyze-with default-node-analyzer node-satisfies? get-node-analyzer get-form-analyzer)
+
+(defn analysis-ex
+  "Constructs new analysis exception with message and lazy position"
+  [get-position message]
+  {:pre [(ifn? get-position)
+         (string? message)]}
+  (AnalysisException. get-position message))
+
+(defn- ex->position [^AnalysisException ex]
+  (let [pos (.getPosition ex)]
+    (assert (pos-int? (:line pos)))
+    (assert (pos-int? (:col pos)))
+    pos))
+
+(def ^:private feature-analyze-order
+  {":default" 1
+   ":cljs"    2
+   ":clj"     3})
+
+(defn- analyze-reader-cond [inner-analyzer ctx [_ list]]
+  (letfn [(reader-cond-list-analyzer [ctx [_ & forms]]
+            (loop [[[feat val] & rem] (->> (partition 2 forms)
+                                           (sort-by (comp feature-analyze-order ffirst)))
+                   ctx ctx
+                   res (transient [:list])]
+              (if feat
+                (let [[ctx' feat'] (analyze-with default-node-analyzer ctx feat)
+                      [ctx' val'] (analyze-with inner-analyzer ctx' val)]
+                  (recur rem ctx' (conj! (conj! res feat') val')))
+                [ctx (persistent! res)])))]
+    (let [[ctx' list'] (analyze-with reader-cond-list-analyzer ctx list)]
+      [ctx' [:reader-cond list']])))
+
+(defn- analyze-meta-nodes [ctx nodes]
+  (when (some? nodes)
+    (loop [ctx ctx
+           [node & xs] nodes
+           result (transient [])]
+      (if (some? node)
+        (case (first node)
+          (:space :newline :comment) (recur ctx xs (conj! result node))
+          (:meta :discard) (let [[ctx' node'] (analyze-with default-node-analyzer ctx node)]
+                             (recur ctx' xs (conj! result node'))))
+        [ctx (seq (persistent! result))]))))
+
+(defn- reader-cond-satisfies? [predicate [_ [_ & forms]]]
+  (loop [ok? (not (empty? forms))
+         [feat val & rem] forms]
+    (if (and feat ok?)
+      (recur (node-satisfies? predicate val) rem)
+      ok?)))
+
+(declare get-node-analyzer get-form-analyzer)
+
+(defn default-node-analyzer
+  "Analyzer that analyzes the given node by using registered
+   default node analysis functions"
+  [ctx node]
+  (let [analyze-f (get-node-analyzer node)]
+    (analyze-f ctx node)))
+
+(defn node-satisfies?
+  "Returns boolean whether the node satisfies the given
+   predicate or not"
+  [predicate node]
+  {:pre [(node? node)
+         (ifn? predicate)]}
+  (if (= :reader-cond (first node))
+    (reader-cond-satisfies? predicate node)
+    (predicate node)))
+
+(defn analyze-with
+  "Analyzes the given node and its meta nodes using the supplied
+   analyzer function and context"
+  [analyzer ctx node]
+  {:pre [(ifn? analyzer)
+         (ctx? ctx)
+         (node? node)]}
+  (as-> [ctx (transient (meta node))] state
+        (let [[ctx m] state]
+          (if-let [[ctx' nodes] (analyze-meta-nodes ctx (:pre m))]
+            [ctx' (assoc! m :pre nodes)]
+            state))
+        (try
+          (let [[ctx m] state
+                [ctx' node'] (if (= :reader-cond (first node))
+                               (analyze-reader-cond analyzer ctx node)
+                               (analyzer ctx node))
+                _ (assert (ctx? ctx') (str "invalid result context while analyzing ast node: " (node->source node)))
+                _ (assert (vector? node') (str "invalid result node while analyzing ast node: " (node->source node)))
+                m' (if-some [node-m (meta node')]
+                     (reduce-kv assoc! m node-m)
+                     m)]
+            [ctx' m' node'])
+          (catch AnalysisException ex
+            (when (= :eval (:mode ctx))
+              (warn (ex->position ex) (.getMessage ex)))
+            (let [[ctx m] state
+                  [ctx' node'] (loop [ctx ctx
+                                      [child & xs] (next node)
+                                      result (transient [(first node)])]
+                                 (if (some? child)
+                                   (let [[ctx' child'] (analyze-with default-node-analyzer ctx child)]
+                                     (recur ctx' xs (conj! result child')))
+                                   [ctx (persistent! result)]))
+                  m' (assoc! m :formatting :whitespace)]
+              [ctx' m' node'])))
+        (let [[ctx m node] state]
+          (if-let [[ctx' nodes] (analyze-meta-nodes ctx (:hidden m))]
+            [ctx' (assoc! m :hidden nodes) node]
+            state))
+        (let [[ctx m node] state]
+          (if-let [[ctx' nodes] (analyze-meta-nodes ctx (:post m))]
+            [ctx' (assoc! m :post nodes) node]
+            state))
+        (let [[ctx-out m node'] state
+              node-out (with-meta node' (persistent! m))]
+          (assert (let [no-nils (fn no-nils [node]
+                                  (->> (map #(if (vector? %) (no-nils %) %) node)
+                                       (filterv some?)))]
+                    (= (no-nils node-out) node))
+                  (str "analyzed node does not match with node " (node->source node)
+                       "\n analyzed-node: " (pr-str node-out)
+                       "\n ast-node:      " (pr-str node)))
+          [ctx-out node-out])))
+
+(defn get-node-type [ctx node]
+  (first node))
+
+(defn get-literal-content [ctx node]
+  (second node))
+
+(defn add-as-ns-binding-analyzer
+  "(Post) analyzer that adds the given symbol node as fully
+   qualified binding using the current namespace for binding's
+   ns part"
+  [ctx node]
   {:pre [(= :symbol (first node))]}
   (let [local-name (symbol (second node))
         fq-name (symbol (:current-ns ctx) (name local-name))
-        b (ctx/create-binding local-name fq-name)]
-    [(ctx/with-binding ctx b)
+        b (create-binding local-name fq-name)]
+    [(add-binding ctx b)
      (vary-meta node #(dissoc (assoc % :binding b) :fq-name))]))
 
-(defn- as-local-binding [ctx node]
+(defn add-as-local-binding-analyzer
+  "(Post) analyzer that adds the given symbol node as an
+   unqualified binding"
+  [ctx node]
   {:pre [(or (= :symbol (first node))
              (= :keyword (first node)))]}
   (let [fq-name (symbol (second node))
         local-name (symbol (name fq-name))
-        b (ctx/create-binding local-name local-name)]
-    [(ctx/with-binding ctx b)
+        b (create-binding local-name local-name)]
+    [(add-binding ctx b)
      (vary-meta node #(dissoc (assoc % :binding b) :fq-name))]))
 
-(defn- post-on-ctx [f]
-  {:pre [(fn? f)]}
-  (fn ctx-post-transform [ctx node]
-    [(f ctx) node]))
-
-(defn- post-on-node [f]
-  {:pre [(fn? f)]}
-  (fn node-post-transform [ctx node]
-    [ctx (f node)]))
-
-(defn- type= [expected-type]
+(defn type= [expected-type]
+  "Creates a `(ctx, node) -> bool` predicate that matches
+   the given node type"
   {:pre [(keyword? expected-type)]}
   (fn type-matches-expected? [ctx node]
-    (= expected-type (a/get-node-type ctx node))))
+    (= expected-type (get-node-type ctx node))))
 
-(defn- is-exactly [expected-type expected-value]
-  (let [err-msg (format "expected '%s'" (str expected-value))]
-    (fn [parent ^State input]
-      (let [[type value :as node] (s/state->next-node input)]
-        (when (or (not= expected-type type)
-                  (not= expected-value value))
-          (s/error parent node err-msg))))))
+(defn val= [expected-val]
+  "Creates a `(ctx, node) -> bool` predicate that matches
+   the given (literal) value"
+  (fn value-matches-expected? [_ node]
+    (= expected-val (second node))))
 
-(defn- on-ctx [f]
-  {:pre [(fn? f)]}
-  (fn [_ ^State input]
-    (s/with-ctx input (f (s/state->ctx input)))))
-
-
-;; Default analyzers
-
-(declare invocation->analyzer)
-
-(defmethod a/default-node-analyzer :list [ctx [_ i :as node]]
-  (if (and (not= :quote (:mode ctx))
-           (= :symbol (a/get-node-type ctx i)))
-    (let [local-name (symbol (a/get-literal-content ctx i))
-          invocation (first (ctx/resolve-fq-name ctx local-name))
-          resolve-as (get (:sym-resolution ctx) invocation invocation)
-          analyzer (invocation->analyzer resolve-as)
-          [ctx' node'] (analyzer ctx node)]
-      [ctx' (vary-meta node' assoc :invocation invocation :resolve-as resolve-as)])
-    (a/default-analyzer ctx node)))
-
-(defmethod a/default-node-analyzer :symbol [ctx [_ content :as node]]
-  (let [local-name (symbol content)
-        fq-name (first (ctx/resolve-fq-name ctx local-name))]
-    [ctx (with-meta node {:fq-name fq-name})]))
-
-(doseq [literal-type [:string :number :boolean :keyword :string :char :regex :nil]]
-  (defmethod a/default-node-analyzer literal-type [ctx node]
-    [ctx (with-meta node nil)]))
-
-(defmethod a/default-node-analyzer :symbol [ctx [_ content :as node]]
-  (let [local-name (symbol content)
-        fq-name (first (ctx/resolve-fq-name ctx local-name))]
-    [ctx (with-meta node {:fq-name fq-name})]))
-
-(doseq [quote-type [:quote :syntax-quote]]
-  (defmethod a/default-node-analyzer quote-type [ctx [_ quoted]]
-    (let [current-mode (:mode ctx)
-          [ctx' quoted'] (a/analyze-with a/default-node-analyzer (ctx/with-mode ctx quote-type) quoted)]
-      [(ctx/with-mode ctx' current-mode)
-       [quote-type quoted']])))
-
-(def ^:private quote-form-analyzer
-  (let [form-analyzer (-> (s/seq (s/symbol-node "invocation")
-                                 (s/any-node "quoted-expr"))
-                          (s/as-analyzer))]
-    (fn [ctx node]
-      (let [current-mode (:mode ctx)
-            [ctx' node'] (form-analyzer (ctx/with-mode ctx :quote) node)]
-        [(ctx/with-mode ctx' current-mode) node']))))
-
-
-
-;; Specs
-
-(defn- with-lexical-scope [& specs]
+(defn lexical-scope-spec
+  "Creates spec that runs the given specs inside their own
+   lexical scope"
+  [& specs]
   {:pre [(seq specs)]}
-  (s/seq
-    (s/custom (on-ctx ctx/push-lexical-scope))
-    (if (= 1 (count specs))
-      (first specs)
-      (apply s/seq specs))
-    (s/custom (on-ctx ctx/pop-lexical-scope))))
+  (let [on-ctx #(fn [_ ^Acc input]
+                  (Acc. (% (.-ctx input)) (.-remaining input) (.-result input)))]
+    (s/seq
+      (s/custom (on-ctx push-lexical-scope))
+      (if (= 1 (count specs))
+        (first specs)
+        (apply s/seq specs))
+      (s/custom (on-ctx pop-lexical-scope)))))
 
-(defn- body-expr-node [name]
-  (s/any-node name (post-on-node #(vary-meta % assoc :body-expr true))))
+(defn node-pred-spec
+  "Creates generic node spec that matches the first remaining child
+   node using the given predicate and runs the given inner spec/analyzer
+   to its children"
+  [predicate spec-name expectation spec-or-analyzer]
+  {:pre [(ifn? predicate)
+         (string? spec-name)
+         (string? expectation)
+         (or (s/spec? spec-or-analyzer)
+             (ifn? spec-or-analyzer))]}
+  (let [analyzer (if (s/spec? spec-or-analyzer) (s/as-analyzer spec-or-analyzer) spec-or-analyzer)
+        err-msg-nil (str "expected " spec-name)
+        err-msg-not-expected (str "expected " spec-name " to be " expectation)]
+    (reify Spec
+      (name [_] spec-name)
+      (run [_ parent input _]
+        (let [ctx (.-ctx ^Acc input)
+              rem (.-remaining ^Acc input)
+              res (.-result ^Acc input)
+              node (first rem)]
+          (cond
+            (nil? node)
+            (s/error parent nil err-msg-nil)
+            (node-satisfies? predicate node)
+            (let [[ctx' n'] (analyze-with analyzer ctx node)]
+              (Acc. ctx' (next rem) (conj! res n')))
+            (= :reader-cond-splice (first node))
+            ; Techically splicing reader conditional should be like normal reader conditional...
+            ; However supporting it would make layouting extremely complex, hence just bailing
+            ; out here (at least for now)
+            (s/error parent node "imo does not support splicing reader conditional here")
+            :else (s/error parent node err-msg-not-expected)))))))
 
-(def ^:private body-expr-spec
-  (body-expr-node "body-expr"))
+(defn node-spec
+  "Creates generic node spec that matches the first remaining child
+   node based on its type and runs the given inner spec/analyzer
+   to its children"
+  [expected-type spec-name spec-or-analyzer]
+  {:pre [(keyword? expected-type)]}
+  (let [pred (fn node-type-equals? [node]
+               (= (first node) expected-type))]
+    (node-pred-spec pred spec-name (str expected-type) spec-or-analyzer)))
 
-(declare binding-form-spec)
+(defn- node-spec-factory* [predicate expectation]
+  (fn node-spec
+    ([spec-name] (node-spec spec-name nil))
+    ([spec-name post-analyzer]
+     {:pre [(string? spec-name)
+            (or (nil? post-analyzer)
+                (ifn? post-analyzer))]}
+     (let [analyzer (s/as-analyzer default-node-analyzer post-analyzer)]
+       (node-pred-spec predicate spec-name expectation analyzer)))))
 
-(def ^:private local-name-binding-spec
-  (s/simple-symbol-node "local-name" as-local-binding))
+(def any-node-spec
+  "Spec that matches any node"
+  (node-spec-factory* (fn [_] true) "any node"))
 
-(def ^:private seq-binding-spec
-  (s/node :vector "seq-binding"
-    (s/seq (s/* (s/recursive #'binding-form-spec))
-           (s/? (s/seq (s/check (is-exactly :symbol "&"))
-                       (s/symbol-node "rest-marker")
-                       (s/recursive #'binding-form-spec)))
-           (s/? (s/seq (s/check (is-exactly :keyword ":as"))
-                       (s/keyword-node "as-symbol")
-                       local-name-binding-spec)))))
+(def simple-symbol-node-spec
+  "Spec that matches a simple symbol node"
+  (let [pred (fn simple-symbol-node? [node]
+               (and (= :symbol (first node))
+                    (simple-symbol-str? (second node))))]
+    (node-spec-factory* pred "simple symbol")))
 
-(def ^:private map-binding-spec
+(def symbol-node-spec
+  "Spec that matches a symbol node"
+  (node-spec-factory* #(= :symbol (first %)) "symbol"))
+
+(def keyword-node-spec
+  "Spec that matches a keyword node"
+  (node-spec-factory* #(= :keyword (first %)) "keyword"))
+
+(def list-node-spec
+  "Spec that matches a list node"
+  (node-spec-factory* #(= :list (first %)) "list"))
+
+(def map-node-spec
+  "Spec that matches a map node"
+  (node-spec-factory* #(= :map (first %)) "map"))
+
+(def set-node-spec
+  "Spec that matches a set node"
+  (node-spec-factory* #(= :set (first %)) "set"))
+
+(def vector-node-spec
+  "Spec that matches a vector node"
+  (node-spec-factory* #(= :vector (first %)) "vector"))
+
+(def string-node-spec
+  "Spec that matches a string node"
+  (node-spec-factory* #(= :string (first %)) "string"))
+
+(def number-node-spec
+  "Spec that matches a number node"
+  (node-spec-factory* #(= :number (first %)) "number"))
+
+(def boolean-node-spec
+  "Spec that matches a boolean node"
+  (node-spec-factory* #(= :boolean (first %)) "boolean"))
+
+(defn body-expr-spec
+  "Creates a spec that accepts any node and annotates it
+   with `:body-expr true` metadata"
+  [spec-name]
+  (any-node-spec spec-name (fn [ctx node] [ctx (vary-meta node assoc :body-expr true)])))
+
+(defn body-exprs-spec*
+  "Creates a spec that accepts 0..n any nodes and annotates them
+   with `:body-expr true` metadata"
+  [spec-name]
+  (s/* (body-expr-spec spec-name)))
+
+(declare recur-binding-form-spec)
+
+(defn local-name-binding-spec
+  "Spec for local name binding nodes"
+  [spec-name]
+  (simple-symbol-node-spec spec-name add-as-local-binding-analyzer))
+
+(defn seq-binding-spec
+  "Spec for destructurable seq binding e.g `[foo bar & lol]`"
+  [spec-name]
+  (let [value-is #(let [err-msg (format "expected '%s'" (str %))]
+                    (fn [parent ^Acc input]
+                      (let [[_ value :as node] (first (.-remaining input))]
+                        (when (not= value %)
+                          (s/error parent node err-msg)))))]
+    (node-spec :vector spec-name
+      (s/seq (s/* (s/recursive #'recur-binding-form-spec))
+             (s/? (s/seq (s/check (value-is "&"))
+                         (symbol-node-spec "rest-marker")
+                         (s/recursive #'recur-binding-form-spec)))
+             (s/? (s/seq (s/check (value-is ":as"))
+                         (keyword-node-spec ":as")
+                         (local-name-binding-spec "seq-name")))))))
+
+(defn map-binding-spec
+  "Spec for destructurable map binding"
+  [spec-name]
   (let [basic-map-binding? (fn [_ [node-type]]
                              (or (= :symbol node-type)
                                  (= :vector node-type)
                                  (= :map node-type)))
-        ns-keys-binding? (fn [_ [node-type content]]
+        ns-keys-binding? (fn [_ [node-type value]]
                            (and (= :keyword node-type)
-                                (boolean (re-find #"/(keys|syms)$" content))))
-        == (fn [s] (fn [_ [_ content]] (= s content)))
-        special-keyword (fn [binding-type]
-                          (s/keyword-node (name binding-type) (post-on-node #(vary-meta % assoc :binding-type binding-type))))]
-    (s/node :map "map-binding"
+                                (boolean (re-find #"/(keys|syms)$" value))))
+        special-keyword-spec (fn [binding-type]
+                               (keyword-node-spec (name binding-type) (fn [ctx node] [ctx (vary-meta node assoc :binding-type binding-type)])))]
+    (node-spec :map spec-name
       (s/* (s/choose
-             (== ":keys") (s/seq (special-keyword :keys)
-                                 (s/node :vector "keys"
-                                   (s/* (s/choose
-                                          (type= :symbol) (s/symbol-node "symbol" as-local-binding)
-                                          (type= :keyword) (s/keyword-node "keyword" as-local-binding)))))
-             (== ":syms") (s/seq (special-keyword :syms)
-                                 (s/node :vector "syms"
-                                   (s/* (s/symbol-node "symbol" as-local-binding))))
-             (== ":strs") (s/seq (special-keyword :strs)
-                                 (s/node :vector "strs"
-                                   (s/* (s/simple-symbol-node "symbol" as-local-binding))))
-             (== ":as") (s/seq (special-keyword :as)
-                               local-name-binding-spec)
-             (== ":or") (s/seq (special-keyword :or)
-                               (s/map-node "defaults-map"))
-             ns-keys-binding? (s/seq (special-keyword :ns-keys)
-                                     (s/node :vector "keys" (s/* local-name-binding-spec)))
-             basic-map-binding? (s/recursive #'binding-form-spec))))))
+             (val= ":keys") (s/seq (special-keyword-spec :keys)
+                                   (node-spec :vector "keys"
+                                     (s/* (s/choose
+                                            (type= :symbol) (symbol-node-spec "symbol" add-as-local-binding-analyzer)
+                                            (type= :keyword) (keyword-node-spec "keyword" add-as-local-binding-analyzer)))))
+             (val= ":syms") (s/seq (special-keyword-spec :syms)
+                                   (node-spec :vector "syms"
+                                     (s/* (symbol-node-spec "symbol" add-as-local-binding-analyzer))))
+             (val= ":strs") (s/seq (special-keyword-spec :strs)
+                                   (node-spec :vector "strs"
+                                     (s/* (simple-symbol-node-spec "symbol" add-as-local-binding-analyzer))))
+             (val= ":as") (s/seq (special-keyword-spec :as)
+                                 (local-name-binding-spec "map-name"))
+             (val= ":or") (s/seq (special-keyword-spec :or)
+                                 (map-node-spec "defaults-map"))
+             ns-keys-binding? (s/seq (special-keyword-spec :ns-keys)
+                                     (node-spec :vector "keys" (s/* (local-name-binding-spec "key-name"))))
+             basic-map-binding? (s/recursive #'recur-binding-form-spec))))))
 
-(def ^:private binding-form-spec
+(def ^:private recur-binding-form-spec
   (let [local-name? (fn [_ [node-type content]]
                       (and (= :symbol node-type) (not= "&" content)))
         seq-binding? (type= :vector)
         map-binding? (type= :map)]
     (s/choose
-      local-name? local-name-binding-spec
-      seq-binding? seq-binding-spec
-      map-binding? map-binding-spec)))
+      local-name? (local-name-binding-spec "simple-name")
+      seq-binding? (seq-binding-spec "vector-destructuring")
+      map-binding? (map-binding-spec "map-destructuring"))))
 
-(def ^:private binding-spec
-  (s/seq binding-form-spec (s/any-node "init-expr")))
+(defn binding-form-spec
+  "Spec for any destructurable form:
+    - symbol
+    - seq
+    - map"
+  []
+  recur-binding-form-spec)
 
-(def ^:private bindings-vec-spec
-  (let [bindings-analyzer (s/as-analyzer (s/* binding-spec))
+(defn binding-pair-spec
+  "Spec for (destructruable) binding + init-expr pair"
+  []
+  (s/seq (binding-form-spec)
+         (any-node-spec "init-expr")))
+
+(defn bindings-vec-spec
+  "Spec for a vector of binding + init-expr pairs"
+  [spec-name]
+  {:pre [(string? spec-name)]}
+  (let [bindings-analyzer (s/as-analyzer (s/* (binding-pair-spec)))
         analyzer (fn [ctx [_ & children :as node]]
                    (when-not (even? (count children))
-                     (throw (a/analysis-ex #(start-of node) "bindings must contain even number of forms")))
+                     (throw (analysis-ex #(start-of node) "bindings must contain even number of forms")))
                    (bindings-analyzer ctx node))]
-    (s/node :vector "bindings" analyzer)))
+    (node-spec :vector spec-name analyzer)))
 
-(def ^:private param-spec
-  (s/* (s/symbol-node "param")))
+(defn- fallback-node-analyzer [ctx [type & children]]
+  (loop [ctx ctx
+         [child & rem] children
+         analyzed (transient [type])]
+    (cond
+      (vector? child) (let [[ctx' child'] (analyze-with default-node-analyzer ctx child)]
+                        (recur ctx' rem (conj! analyzed child')))
+      (string? child) (recur ctx rem (conj! analyzed child))
+      :else [ctx (persistent! analyzed)])))
 
-(def ^:private fn-tail-spec
-  (with-lexical-scope
-    (s/named "params" seq-binding-spec)
-    (s/? (s/map-node "pre-post-map"))
-    (s/* body-expr-spec)))
+(defn- list-node-analyzer [ctx [_ i :as node]]
+  (if (and (not= :quote (:mode ctx))
+           (= :symbol (get-node-type ctx i)))
+    (let [local-name (symbol (get-literal-content ctx i))
+          invocation (first (resolve-fq-name ctx local-name))
+          form-name (get (:sym-resolution ctx) invocation invocation)
+          analyzer (get-form-analyzer form-name)
+          [ctx' node'] (analyzer ctx node)]
+      [ctx' (vary-meta node' assoc :invocation invocation :resolve-as form-name)])
+    (fallback-node-analyzer ctx node)))
 
-(def ^:private signature-spec
-  (s/node :list "signature"
-    (s/as-analyzer fn-tail-spec (post-on-node #(vary-meta % assoc :signature true)))))
+(defn- symbol-node-analyzer [ctx [_ content :as node]]
+  (let [local-name (symbol content)
+        fq-name (first (resolve-fq-name ctx local-name))]
+    [ctx (with-meta node {:fq-name fq-name})]))
 
-(def ^:private fn-spec
-  (s/seq (s/symbol-node "invocation")
-         (s/? (s/simple-symbol-node "fname" as-ns-binding))
-         (s/choose
-           (type= :vector) fn-tail-spec
-           (type= :list) (s/+ signature-spec))))
+(defn- literal-node-analyzer [ctx node]
+  [ctx (with-meta node nil)])
 
-(def ^:private letfn-spec
-  (with-lexical-scope
-    (s/symbol-node "invocation")
-    (s/node :vector "fnspecs"
-      (s/* (s/node :list "fnspec"
-             (s/seq (s/simple-symbol-node "fname" as-local-binding)
-                    (s/choose
-                      (type= :vector) fn-tail-spec
-                      (type= :list) (s/+ signature-spec))))))
-    (s/* body-expr-spec)))
+(defn- quote-node-analyzer [ctx [_ quoted]]
+  (let [current-mode (:mode ctx)
+        [ctx' quoted'] (analyze-with default-node-analyzer (set-mode ctx :quote) quoted)]
+    [(set-mode ctx' current-mode)
+     [:quote quoted']]))
 
-(def ^:private let-spec
-  (with-lexical-scope
-    (s/symbol-node "invocation")
-    bindings-vec-spec
-    (s/* body-expr-spec)))
+(defn- syntax-quote-node-analyzer [ctx [_ quoted]]
+  (let [current-mode (:mode ctx)
+        [ctx' quoted'] (analyze-with default-node-analyzer (set-mode ctx :syntax-quote) quoted)]
+    [(set-mode ctx' current-mode)
+     [:syntax-quote quoted']]))
 
-(def ^:private seq-expr-bindings-spec
-  (let [== (fn [s] (fn [_ [_ content]] (= content s)))]
-    (s/node :vector "seq-expr-bindings"
-      (s/* (s/seq binding-spec
-                  (s/* (s/choose
-                         (== ":let") (s/seq (s/keyword-node ":let") bindings-vec-spec)
-                         (== ":while") (s/seq (s/keyword-node ":while") body-expr-spec)
-                         (== ":when") (s/seq (s/keyword-node ":when") body-expr-spec)
-                         binding-spec)))))))
+(def ^:private quote-form-analyzer
+  (let [form-analyzer (-> (s/seq (symbol-node-spec "invocation")
+                                 (any-node-spec "quoted-expr"))
+                          (s/as-analyzer))]
+    (fn [ctx node]
+      (let [current-mode (:mode ctx)
+            [ctx' node'] (form-analyzer (set-mode ctx :quote) node)]
+        [(set-mode ctx' current-mode) node']))))
 
-(def ^:private for-spec
-  (with-lexical-scope
-    (s/symbol-node "invocation")
-    seq-expr-bindings-spec
-    body-expr-spec))
+(def ^:private do-form-analyzer
+  (-> (s/seq (symbol-node-spec "invocation")
+             (s/* (any-node-spec "body-expr" (fn [ctx node] [ctx (vary-meta node assoc :body-expr true)]))))
+      (s/as-analyzer)))
 
-(def ^:private do***-spec
-  (with-lexical-scope
-    (s/symbol-node "invocation")
-    seq-expr-bindings-spec
-    (s/* body-expr-spec)))
+(def ^:private type->node-analyzer
+  (->> [:string :number :boolean :keyword :string :char :regex :nil]
+       (map (fn [literal-type] [literal-type literal-node-analyzer]))
+       (into {:list         list-node-analyzer
+              :symbol       symbol-node-analyzer
+              :quote        quote-node-analyzer
+              :syntax-quote syntax-quote-node-analyzer})))
 
-(def ^:private do-spec
-  (s/seq (s/symbol-node "invocation")
-         (s/* body-expr-spec)))
+(defonce ^:private invocation->form-analyzer
+  (volatile! {'quote quote-form-analyzer
+              'do    do-form-analyzer}))
 
-(def ^:private defn-spec
-  (s/seq (s/symbol-node "invocation")
-         (s/simple-symbol-node "fname" as-ns-binding)
-         (s/? (s/string-node "doc-string"))
-         (s/? (s/map-node "attrs-map"))
-         (s/choose
-           (type= :vector) fn-tail-spec
-           (type= :list) (s/seq (s/+ signature-spec)
-                                (s/? (s/map-node "attrs-map"))))))
+(defn get-node-analyzer
+  "Returns analyzer for the given node"
+  [node]
+  {:pre [(node? node)]}
+  (get type->node-analyzer (first node) fallback-node-analyzer))
 
-(def ^:private def-form-analyzer
-  (let [with-doc-str-analyzer (-> (s/seq (s/symbol-node "invocation")
-                                         (s/simple-symbol-node "name" as-ns-binding)
-                                         (s/string-node "doc-string")
-                                         (s/? (body-expr-node "value")))
-                                  (s/as-analyzer))
-        no-doc-str-analyzer (-> (s/seq (s/symbol-node "invocation")
-                                       (s/simple-symbol-node "name" as-ns-binding)
-                                       (s/custom (fn [_ ^State input]
-                                                   (let [res (s/state->result input)]
-                                                     (s/with-result input (conj! res nil)))))
-                                       (s/? (body-expr-node "value")))
-                                (s/as-analyzer))]
-    (fn [ctx [_ & children :as node]]
-      (if (>= (count children) 4)
-        (with-doc-str-analyzer ctx node)
-        (no-doc-str-analyzer ctx node)))))
+(defn get-form-analyzer
+  "Returns analyzer for the given form name"
+  [form-name]
+  {:pre [(symbol? form-name)]}
+  (get @invocation->form-analyzer form-name fallback-node-analyzer))
 
-(def ^:private if-spec
-  (s/seq (s/symbol-node "invocation")
-         (s/any-node "test")
-         (body-expr-node "then")
-         (s/? (body-expr-node "else"))))
-
-(def ^:private ns-require-spec
-  (let [== (fn [s] (fn [_ [_ content]] (= s content)))
-        as-spec (s/seq (s/keyword-node ":as")
-                       (s/simple-symbol-node "alias"))
-        mark-renames (fn [ctx node]
-                       (let [renames (-> (next node)
-                                         (map (comp symbol second))
-                                         (partition-all 2)
-                                         (map vec)
-                                         (into {}))]
-                         [ctx (vary-meta node :rename renames)]))
-        rename-spec (s/seq (s/keyword-node ":rename")
-                           (s/node :map "renamings"
-                             (-> (s/* (s/seq (s/simple-symbol-node "old-name")
-                                             (s/simple-symbol-node "new-name")))
-                                 (s/as-analyzer mark-renames))))
-        mark-as-refer (fn [ctx node]
-                        [ctx (vary-meta node assoc :refer (symbol (second node)))])
-        refered-sym-spec (s/simple-symbol-node "refered-symbol" mark-as-refer)
-        collect-vec-refers (fn [ctx node]
-                             (let [refers (set (map (comp :refer meta) (next node)))]
-                               [ctx (vary-meta node assoc :refer refers)]))
-        refer-vec-spec (s/node :vector "refers" (s/as-analyzer (s/* refered-sym-spec) collect-vec-refers))
-        mark-as-refer-all (fn [ctx node] [ctx (vary-meta node assoc :refer :all)])
-        refer-all-spec (s/keyword-node ":all" mark-as-refer-all)
-        refer-spec (s/seq (s/keyword-node ":refer")
-                          (s/choose
-                            (== ":all") refer-all-spec
-                            (type= :vector) refer-vec-spec))
-        collect-vec-libspec (fn [ctx [_ lib-ns & opts :as node]]
-                              (let [lib-ns-sym (symbol (second lib-ns))
-                                    libspec
-                                    (loop [libspec {:namespace lib-ns-sym}
-                                           [[o v] & remaining] (partition 2 opts)]
-                                      (if o
-                                        (recur (case (second o)
-                                                 ":refer" (if-let [refer (:refer (meta v))]
-                                                            (assoc libspec :refer refer)
-                                                            libspec)
-                                                 ":as" (assoc libspec :as (symbol (second v)))
-                                                 ":rename" (if-let [rename (:rename (meta v))]
-                                                             (assoc libspec :rename rename)
-                                                             libspec))
-                                               remaining)
-                                        (update libspec
-                                                :refer #(if (= % :all)
-                                                          (or (get *exports* lib-ns-sym)
-                                                              (warn nil "couldn't find :all exports for " lib-ns-sym))
-                                                          %))))]
-                                [ctx (vary-meta node assoc :libspec libspec)]))
-        vec-libspec (s/node :vector "libspec"
-                      (-> (s/seq (s/simple-symbol-node "lib")
-                                 (s/* (s/choose
-                                        (== ":refer") refer-spec
-                                        (== ":rename") rename-spec
-                                        (== ":as") as-spec)))
-                          (s/as-analyzer collect-vec-libspec)))
-        collect-sym-libspec (fn [ctx node]
-                              (let [libspec {:namespace (symbol (second node))}]
-                                [ctx (vary-meta node assoc :libspec libspec)]))
-        sym-libspec (s/simple-symbol-node "libname" collect-sym-libspec)
-        collect-prefix-list (fn [ctx [_ prefix-node & libspec-nodes :as node]]
-                              (let [prefix (str (second prefix-node) ".")
-                                    libspecs (->> (map (comp :libspec meta) libspec-nodes)
-                                                  (map (fn [libspec]
-                                                         (update libspec :namespace #(symbol (str prefix %))))))]
-                                [ctx (vary-meta node assoc :libspecs libspecs)]))
-        prefix-list (s/node :list "prefix-list"
-                      (-> (s/seq (s/simple-symbol-node "prefix")
-                                 (s/+ (s/choose
-                                        (type= :vector) vec-libspec
-                                        (type= :symbol) sym-libspec)))
-                          (s/as-analyzer collect-prefix-list)))
-        flag (s/keyword-node "flag" (fn [ctx node] [ctx (vary-meta node assoc :flag (symbol (second node)))]))]
-    (s/seq (s/keyword-node ":require")
-           (s/+ (s/choose
-                  (type= :vector) vec-libspec
-                  (type= :symbol) sym-libspec
-                  (type= :list) prefix-list
-                  (type= :keyword) flag)))))
-
-(def ^:private ns-refer-clojure-spec
-  (let [== (fn [s] (fn [_ [_ content]] (= s content)))
-        syms-as (fn [key]
-                  (fn [ctx [_ & children :as node]]
-                    (let [syms (map (comp symbol second) children)]
-                      [ctx (vary-meta node assoc key syms)])))
-        only-spec (s/seq (s/keyword-node ":only")
-                         (s/node :vector "requires"
-                           (-> (s/* (s/simple-symbol-node "require"))
-                               (s/as-analyzer (syms-as :only)))))
-        exclude-spec (s/seq (s/keyword-node ":exclude")
-                            (s/node :vector "requires"
-                              (-> (s/* (s/simple-symbol-node "require"))
-                                  (s/as-analyzer (syms-as :exclude)))))
-        rename-spec (s/seq (s/keyword-node ":rename")
-                           (s/node :map "renames"
-                             (-> (s/* (s/seq (s/simple-symbol-node "old-name")
-                                             (s/simple-symbol-node "new-name")))
-                                 (s/as-analyzer (fn [ctx [_ & children :as node]]
-                                                  (let [renames (->> (map (comp symbol second) children)
-                                                                     (partition 2)
-                                                                     (map vec)
-                                                                     (into {}))]
-                                                    [ctx (vary-meta node assoc :rename renames)]))))))]
-    (s/seq (s/keyword-node ":refer-clojure")
-           (s/* (s/choose
-                  (== ":only") only-spec
-                  (== ":exclude") exclude-spec
-                  (== ":rename") rename-spec)))))
-
-
-(def ^:private ns-import-spec
-  (let [single-class-spec (s/simple-symbol-node
-                            "class-name"
-                            (fn [ctx node]
-                              (let [parts (string/split (second node) #"\.")
-                                    [pkg cls] (if (= 1 (count parts))
-                                                [nil (first parts)]
-                                                [(string/join "." (pop parts))
-                                                 (peek parts)])
-                                    import {:package pkg
-                                            :class   cls}]
-                                [ctx (vary-meta node assoc :imports [import])])))
-        class-list-spec (s/node :list "package-list"
-                          (-> (s/seq (s/simple-symbol-node "package-name")
-                                     (s/+ (s/simple-symbol-node "")))
-                              (s/as-analyzer
-                                (fn [ctx [_ pkg-node & class-nodes :as node]]
-                                  (let [pkg (second pkg-node)
-                                        classes (map second class-nodes)
-                                        imports (map (fn [c] {:package pkg :class c}) classes)]
-                                    [ctx (vary-meta node assoc :imports imports)])))))]
-    (s/seq (s/keyword-node ":import")
-           (s/* (s/choose
-                  (type= :symbol) single-class-spec
-                  (type= :list) class-list-spec)))))
-
-(def ^:private ns-use-spec
-  (s/seq (s/keyword-node ":use")
-         (s/custom (fn [parent input]
-                     (warn (start-of parent) ":use is not supported (at least for now), use :require instead")
-                     input))
-         (s/* (s/any-node "libspec"))))
-
-(def ^:private ns-gen-class-spec
-  (s/seq (s/keyword-node ":gen-class")
-         (s/* (s/any-node "option"))))
-
-(def ^:private ns-load-spec
-  (s/seq (s/keyword-node ":load")
-         (s/* (s/string-node "lib"))))
-
-(def ^:private ns-refer-spec
-  (s/seq (s/keyword-node ":refer")
-         (s/simple-symbol-node "lib")
-         (s/custom (fn [parent input]
-                     (warn (start-of parent) ":refer is not supported (at least for now)")
-                     input))
-         (s/* (s/any-node "filter"))))
-
-(def ^:private ns-clause-analyzer
-  (let [== (fn [s] (fn [_ [_ content]] (= s content)))
-        collect-meta (fn [ctx [_ clause & args :as node]]
-                       [ctx (case (second clause)
-                              nil node
-                              ":require" (let [requires (mapcat
-                                                          #(let [m (meta %)]
-                                                             (cond
-                                                               (:libspecs m) (:libspecs m)
-                                                               (:libspec m) [(:libspec m)]
-                                                               :else nil))
-                                                          args)]
-                                           (vary-meta node assoc :clause :require :requires requires))
-                              ":refer-clojure" (let [spec (->> (map #(select-keys (meta %) [:only :exclude :rename]) args)
-                                                               (reduce merge {}))]
-                                                 (vary-meta node assoc :clause :refer-clojure :spec spec))
-                              ":import" (let [imports (mapcat (comp :imports meta) args)]
-                                          (vary-meta node assoc :clause :import :imports imports))
-                              (let [clause (keyword (subs (second clause) 1))]
-                                (vary-meta node assoc :clause clause)))])]
-    (-> (s/choose
-          (== ":require") ns-require-spec
-          (== ":refer-clojure") ns-refer-clojure-spec
-          (== ":import") ns-import-spec
-          (== ":gen-class") ns-gen-class-spec
-          (== ":use") ns-use-spec
-          (== ":refer") ns-refer-spec
-          (== ":load") ns-load-spec)
-        (s/as-analyzer collect-meta))))
-
-(def ^:private ns-analyzer
-  (letfn [(in-ns [ctx [_ _ ns-name-node _ _ & clause-nodes :as node]]
-            (let [ns-name (second ns-name-node)
-                  requires (mapcat (comp :requires meta) clause-nodes)
-                  aliases (keep (fn [{:keys [alias namespace]}]
-                                  (some-> alias (ctx/create-alias namespace)))
-                                requires)
-                  clj-spec (first (keep #(let [m (meta %)]
-                                           (when (= :refer-clojure (:clause m))
-                                             (:spec m)))
-                                        clause-nodes))
-                  clj-exports (as-> built-in/clojure-core-exports exports
-                                    (if-let [only (seq (:only clj-spec))]
-                                      (filter (comp (set (map name only)) name) exports)
-                                      exports)
-                                    (if-let [exclude (seq (:exclude clj-spec))]
-                                      (remove (comp (set (map name exclude)) name) exports)
-                                      exports)
-                                    (let [rename (or (:rename clj-spec) {})]
-                                      (map #(if-let [local (get rename (symbol (name %)))]
-                                              (ctx/create-binding local %)
-                                              (ctx/create-binding (symbol (name %)) %))
-                                           exports)))
-                  imports (->> (mapcat (comp :imports meta) clause-nodes)
-                               (mapcat (fn [{:keys [package class]}]
-                                         (let [fq-s (if package
-                                                      (str package "." class)
-                                                      class)]
-                                           [; class name
-                                            (ctx/create-binding (symbol class) (symbol fq-s))
-                                            ; ctor
-                                            (ctx/create-binding (symbol (str class "."))
-                                                                (symbol (str fq-s ".")))]))))
-                  bindings (-> (mapcat (fn [{:keys [refer rename namespace]}]
-                                         (map #(let [local-name (get rename % %)
-                                                     fq-name (symbol (str namespace) (str %))]
-                                                 (ctx/create-binding local-name fq-name))
-                                              refer))
-                                       requires)
-                               (concat clj-exports imports))
-                  ctx-in-ns (ctx/in-ns ctx ns-name aliases bindings)]
-              [ctx-in-ns node]))]
-    (-> (s/seq (s/symbol-node "invocation")
-               (s/simple-symbol-node "ns-name")
-               (s/? (s/string-node "doc-string"))
-               (s/? (s/map-node "attr-map"))
-               (s/* (s/node :list "ns-clause" ns-clause-analyzer)))
-        (s/as-analyzer in-ns))))
-
-(def ^:private invocation->analyzer
-  (let [if-analyzer (s/as-analyzer if-spec)
-        do-analyzer (s/as-analyzer do-spec)
-        quote-analyzer quote-form-analyzer
-        let-analyzer (s/as-analyzer let-spec)
-        defn-analyzer (s/as-analyzer defn-spec)
-        fn-analyzer (s/as-analyzer fn-spec)
-        letfn-analyzer (s/as-analyzer letfn-spec)
-        for-analyzer (s/as-analyzer for-spec)
-        doseq-analyzer (s/as-analyzer do***-spec)]
-    (fn [invocation]
-      (case invocation
-        def def-form-analyzer
-        if if-analyzer
-        do do-analyzer
-        quote quote-analyzer
-        clojure.core/ns ns-analyzer
-        clojure.core/let let-analyzer
-        clojure.core/defn defn-analyzer
-        clojure.core/fn fn-analyzer
-        clojure.core/letfn letfn-analyzer
-        clojure.core/for for-analyzer
-        clojure.core/doseq doseq-analyzer
-        a/default-analyzer))))
-
-(defn- create-clj-context []
-  (let [bindings (->> built-in/clojure-core-exports
-                      (map #(ctx/create-binding (symbol (name %)) %)))
-        sym-resolution built-in/clojure-core-symbol-resolution]
-    (ctx/create-context bindings sym-resolution)))
-
-;;
-;;
-
-(defn analyze-ast
-  "Runs static analysis to the given input ast and add annotates
-   the returned ast nodes with analysis results"
-  [ast]
-  {:pre [(node? ast)
-         (= :$ (first ast))]}
-  (timed "analysis"
-    (let [ctx (create-clj-context)]
-      (-> (a/analyze-with a/default-node-analyzer ctx ast)
-          (second)))))
+(defn add-form-analyzer!
+  "Registers analyzer for the given fully qualified form name"
+  [form-name analyzer]
+  {:pre [(symbol? form-name)
+         (ifn? analyzer)]}
+  (vswap! invocation->form-analyzer assoc form-name analyzer))

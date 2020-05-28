@@ -27,6 +27,10 @@
   {:pre [(keyword? node-type)]}
   (AstNode/getEndChars node-type))
 
+(defn simple-symbol-str? [s]
+  {:pre [(string? s)]}
+  (Util/isSimpleSymbolStr s))
+
 (defn node->source [node]
   {:pre [(node? node)]}
   (letfn [(to-str! [^StringBuilder sb node]

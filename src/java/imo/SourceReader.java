@@ -3,6 +3,7 @@ package imo;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Stack;
@@ -460,8 +461,20 @@ public class SourceReader {
       throw new ReaderException("Unexpected EOF while reading reader conditional");
     }
     if (!LIST.equals(next.type)) {
-      throw new ReaderException("Expecting list after reader conditional");
+      throw new ReaderException("Reader conditional body must be a list");
     }
+    if (next.children.size() % 2 != 0) {
+      throw new ReaderException("Reader conditional requires an even number of forms");
+    }
+    Iterator<?> it = next.children.iterator();
+    while (it.hasNext()) {
+      Object feature = it.next();
+      if (!(feature instanceof AstNode && KEYWORD.equals(((AstNode) feature).type))) {
+        throw new ReaderException("Feature should be a keyword");
+      }
+      it.next();
+    }
+
     AstNode readerCond = splice
         ? createReaderCondSplice(line, col, next)
         : createReaderCond(line, col, next);

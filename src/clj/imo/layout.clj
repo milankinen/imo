@@ -1,8 +1,13 @@
-(ns imo.formatting.core
-  (:require [imo.util :refer [node?]])
+(ns imo.layout
+  (:require [imo.util :refer [node? split-lines begin-chars end-chars spaces]]
+            [clojure.string :as string])
   (:import (java.io Writer)
            (imo Layout)
            (imo RawLayout InlineLayout AlignedLayout AltLayout SelectLayout)))
+
+;;
+;; Core layouting
+;;
 
 (defn- bits->props [bits]
   {:max-shrinkable-width       (Layout/maxShrinkableWidth bits)
@@ -15,6 +20,7 @@
    :last-line-offset-absolute? (Layout/isLastLineOffsetAbsolute bits)
    :multiline?                 (Layout/isMultiline bits)})
 
+; For REPL debugging purposes
 (defmethod print-method Layout [^Layout layout ^Writer writer]
   (let [kind (.kind layout)
         props (merge (bits->props (.-bits layout))
@@ -305,3 +311,180 @@
    indended layout from the given variadric lines"
   [& lines]
   (-|* lines))
+
+;;
+;; Default node layouts
+;;
+
+(defn- format-original [node]
+  (letfn [(format-nodes! [sb nodes absolute?]
+            (loop [[node & rem :as nodes] (seq nodes)
+                   absolute? absolute?]
+              (if nodes
+                (recur rem (format-node! sb node absolute?))
+                absolute?)))
+          (write-node! [^StringBuilder sb [type & children] absolute?]
+            (case type
+              (:space :number :nil :boolean :symbol :keyword :char :regex)
+              (do (.append sb ^String (first children))
+                  absolute?)
+              (:string)
+              (let [s (first children)]
+                (.append sb s)
+                (or absolute? (string/includes? s "\n")))
+              (:newline :comment)
+              (do (.append sb (first children))
+                  false)
+              (format-nodes! sb children absolute?)))
+          (format-node! [^StringBuilder sb node absolute?]
+            (if (some? node)
+              (let [m (meta node)
+                    t (first node)
+                    _ (when-not (keyword? t)
+                        (println node))
+                    abs? (format-nodes! sb (:pre m) absolute?)
+                    _ (when-some [chars (begin-chars t)]
+                        (.append sb ^String chars))
+                    abs? (write-node! sb node abs?)
+                    abs? (format-nodes! sb (:hidden m) abs?)
+                    _ (when-some [chars (end-chars t)]
+                        (.append sb ^String chars))
+                    abs? (format-nodes! sb (:post m) abs?)]
+                abs?)
+              absolute?))]
+    (let [sb (StringBuilder.)
+          absolute? (format-node! sb node false)]
+      [(.toString sb) absolute?])))
+
+(defn preserve
+  "Creates layout that tries to preserve the existing formatting
+   as much as possible"
+  [node]
+  {:pre [(node? node)]}
+  (let [[src absolute?] (format-original node)
+        col (:col (meta node))
+        lines (split-lines src)
+        lines (if (> col 1)
+                (let [re (re-pattern (str "^[ ]{1," (dec col) "}"))]
+                  (mapv #(string/replace % re "") lines))
+                (vec lines))
+        bits (Layout/toBits
+               (> (count lines) 1)
+               (count (first lines))
+               (count (peek lines))
+               (reduce max 0 (map count lines))
+               0
+               false
+               false
+               absolute?
+               0)]
+    (proxy [Layout] [bits nil]
+      (kind [] :preserve)
+      (inspectChildren [] (seq [(string/join "\n" lines)]))
+      (shrink [_ _ _ _]
+        (throw (AssertionError. "not shrinkable")))
+      (print [^StringBuilder sb offset]
+        (let [alignment (spaces offset)]
+          (.append sb ^String (first lines))
+          (doseq [line (next lines)]
+            (.append sb "\n")
+            (.append sb alignment)
+            (.append sb ^String line)))))))
+
+
+(def ^:private node-types
+  [:anon-fn
+   :boolean
+   :char
+   :deref
+   :discard
+   :keyword
+   :list
+   :map
+   :meta
+   :nil
+   :ns-map
+   :number
+   :quote
+   :reader-cond
+   :reader-cond-splice
+   :regex
+   :set
+   :string
+   :symbol
+   :symbolic-val
+   :syntax-quote
+   :tagged-literal
+   :unquote
+   :unquote-splice
+   :var-quote
+   :vector])
+
+(doseq [type node-types]
+  (defmethod layout type [node]
+    (preserve node)))
+
+(def ^:private spaces-before-comment
+  (spaces 2))
+
+(defn- format-top-level-node! [^StringBuilder sb width node]
+  (let [result (fit (layout node) width)
+        code (render result)
+        resolved-as (:resolve-as (meta node))]
+    (.append sb ^String code)
+    (or (and (or (= 'def resolved-as)
+                 (= 'clojure.core/declare resolved-as))
+             (not (multiline? result)))
+        (= :meta (first node)))))
+
+(defn- append-newlines! [^StringBuilder sb n]
+  (dotimes [_ n]
+    (.append sb "\n")))
+
+(defn format-root
+  "Formats the given root ast node trying to fit the output
+   to the given target width as well as possible"
+  [width [node-type & forms :as root-node]]
+  {:pre [(pos-int? width)
+         (node? root-node)
+         (= :$ node-type)]}
+  (let [sb (StringBuilder.)
+        m (meta root-node)
+        nodes (concat (:pre m)
+                      (mapcat #(let [m (meta %)
+                                     pre (:pre m)
+                                     hidden (:hidden m)
+                                     post (:post m)]
+                                 (if (or pre hidden post)
+                                   (let [node (vary-meta % dissoc :pre :hidden :post)]
+                                     (concat pre [node] hidden post))
+                                   [%]))
+                              forms)
+                      (:hidden m)
+                      (:post m))]
+    (loop [[node & rem :as nodes] (seq nodes)
+           needs-empty-line? false
+           prev-comment? true
+           newlines 0]
+      (if nodes
+        (case (first node)
+          :space (recur rem needs-empty-line? prev-comment? newlines)
+          :newline (recur rem needs-empty-line? prev-comment? (min 3 (inc newlines)))
+          :comment (do (when (and (pos-int? (.length sb))
+                                  (not prev-comment?))
+                         (if (zero? newlines)
+                           (.append sb spaces-before-comment)
+                           (append-newlines! sb (max 2 newlines))))
+                       (.append sb (second node))
+                       (recur rem false true 1))
+          (do (when (pos-int? (.length sb))
+                (as-> (max newlines (if needs-empty-line? 2 1)) required
+                      (if prev-comment? (dec required) required)
+                      (append-newlines! sb required)))
+              (let [compact? (format-top-level-node! sb width node)]
+                (recur rem (not compact?) false 0))))
+        ; Ensure that file ends with empty line
+        (when (and (pos-int? (.length sb))
+                   (not prev-comment?))
+          (.append sb "\n"))))
+    (.toString sb)))
