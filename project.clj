@@ -21,6 +21,7 @@
              :test    {:dependencies [[eftest "0.5.9"]]}
              :clitest {:global-vars {*warn-on-reflection* false}}
              :uberjar {:global-vars {*assert* false}
+                       :clean-targets ["target/uberjar" "target/native"]
                        :jvm-opts    [~(str "-Dimo.version=" :project/version)]
                        :aot         :all}}
   :aliases {"i"            ["do"
@@ -33,7 +34,6 @@
                                                                      (.replaceFirst "^1\\." "")
                                                                      (.split "\\.")
                                                                      (first))]
-                            ["clean"]
                             ["uberjar"]
                             ["shell" "./scripts/build_native_image.sh"]]
             "linux-image"  ["shell" "./scripts/build_linux_image_with_docker.sh"]
