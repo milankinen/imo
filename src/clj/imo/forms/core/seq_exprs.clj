@@ -27,4 +27,5 @@
     (a/body-exprs-spec* "body-expr")))
 
 (a/set-form-analyzer! 'clojure.core/for (s/as-analyzer for-spec))
+
 (a/set-form-analyzer! 'clojure.core/doseq (s/as-analyzer do***-spec))

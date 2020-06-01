@@ -88,7 +88,6 @@
     (string? x) (raw x)
     :else (throw (IllegalArgumentException. (str "Can't coerce to layout: " (pr-str x))))))
 
-
 ;;
 ;;
 
@@ -390,7 +389,6 @@
             (.append sb "\n")
             (.append sb alignment)
             (.append sb ^String line)))))))
-
 
 (def ^:private node-types
   [:anon-fn

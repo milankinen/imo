@@ -21,4 +21,5 @@
     (a/body-exprs-spec* "body-expr")))
 
 (a/set-form-analyzer! 'clojure.core/let (s/as-analyzer let-spec))
+
 (a/set-form-analyzer! 'clojure.core/letfn (s/as-analyzer letfn-spec))

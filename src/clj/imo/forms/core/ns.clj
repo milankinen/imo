@@ -114,7 +114,6 @@
                   (a/val= ":exclude") exclude-spec
                   (a/val= ":rename") rename-spec)))))
 
-
 (def ^:private ns-import-spec
   (let [single-class-spec (a/simple-symbol-node-spec
                             "class-name"
@@ -242,4 +241,3 @@
         (s/as-analyzer analyze-ns))))
 
 (a/set-form-analyzer! 'clojure.core/ns ns-analyzer)
-
