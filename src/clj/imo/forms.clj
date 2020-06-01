@@ -5,4 +5,5 @@
     [imo.forms.core.if]
     [imo.forms.core.let]
     [imo.forms.core.ns]
-    [imo.forms.core.seq-exprs]))
+    [imo.forms.core.seq-exprs]
+    [imo.forms.spec.def]))

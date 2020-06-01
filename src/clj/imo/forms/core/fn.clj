@@ -29,5 +29,8 @@
            (a/type= :list) (s/seq (s/+ signature-spec)
                                   (s/? (a/map-node-spec "attrs-map"))))))
 
-(a/add-form-analyzer! 'clojure.core/fn (s/as-analyzer fn-spec))
-(a/add-form-analyzer! 'clojure.core/defn (s/as-analyzer defn-spec))
+(doto 'clojure.core/fn
+  (a/set-form-analyzer! (s/as-analyzer fn-spec)))
+
+(doto 'clojure.core/defn
+  (a/set-form-analyzer! (s/as-analyzer defn-spec)))

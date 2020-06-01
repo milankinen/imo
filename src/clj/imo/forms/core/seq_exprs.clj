@@ -26,5 +26,5 @@
     seq-expr-bindings-spec
     (a/body-exprs-spec* "body-expr")))
 
-(a/add-form-analyzer! 'clojure.core/for (s/as-analyzer for-spec))
-(a/add-form-analyzer! 'clojure.core/doseq (s/as-analyzer do***-spec))
+(a/set-form-analyzer! 'clojure.core/for (s/as-analyzer for-spec))
+(a/set-form-analyzer! 'clojure.core/doseq (s/as-analyzer do***-spec))

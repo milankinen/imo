@@ -20,5 +20,5 @@
     (a/bindings-vec-spec "bindings")
     (a/body-exprs-spec* "body-expr")))
 
-(a/add-form-analyzer! 'clojure.core/let (s/as-analyzer let-spec))
-(a/add-form-analyzer! 'clojure.core/letfn (s/as-analyzer letfn-spec))
+(a/set-form-analyzer! 'clojure.core/let (s/as-analyzer let-spec))
+(a/set-form-analyzer! 'clojure.core/letfn (s/as-analyzer letfn-spec))

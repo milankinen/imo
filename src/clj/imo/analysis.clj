@@ -642,7 +642,7 @@
   {:pre [(symbol? form-name)]}
   (get @invocation->form-analyzer form-name fallback-node-analyzer))
 
-(defn add-form-analyzer!
+(defn set-form-analyzer!
   "Registers analyzer for the given fully qualified form name"
   [form-name analyzer]
   {:pre [(symbol? form-name)

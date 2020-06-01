@@ -476,7 +476,7 @@
       (if nodes
         (case (first node)
           :space (recur rem needs-empty-line? prev-comment? newlines)
-          :newline (recur rem needs-empty-line? prev-comment? (min 3 (inc newlines)))
+          :newline (recur rem needs-empty-line? prev-comment? (min 2 (inc newlines)))
           :comment (do (when (and (pos-int? (.length sb))
                                   (not prev-comment?))
                          (if (zero? newlines)

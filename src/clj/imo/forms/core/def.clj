@@ -1,6 +1,7 @@
 (ns imo.forms.core.def
   (:require [imo.analysis.spec :as s]
-            [imo.analysis :as a]))
+            [imo.analysis :as a]
+            [imo.layout :as l]))
 
 (def ^:private def-analyzer
   (let [with-doc-str-analyzer (-> (s/seq (a/symbol-node-spec "invocation")
@@ -18,4 +19,16 @@
         (with-doc-str-analyzer ctx node)
         (no-doc-str-analyzer ctx node)))))
 
-(a/add-form-analyzer! 'def def-analyzer)
+(def ^:private defonce-analyzer
+  (-> (s/seq (a/symbol-node-spec "invocation")
+             (a/simple-symbol-node-spec "name" a/add-as-ns-binding-analyzer)
+             (a/any-node-spec "expr"))
+      (s/as-analyzer)))
+
+(doto 'def
+  (a/set-form-analyzer! def-analyzer)
+  (l/mark-as-groupable!))
+
+(doto 'clojure.core/defonce
+  (a/set-form-analyzer! defonce-analyzer)
+  (l/mark-as-groupable!))

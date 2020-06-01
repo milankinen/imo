@@ -8,4 +8,4 @@
          (a/body-expr-spec "then")
          (s/? (a/body-expr-spec "else"))))
 
-(a/add-form-analyzer! 'if (s/as-analyzer if-spec))
+(a/set-form-analyzer! 'if (s/as-analyzer if-spec))

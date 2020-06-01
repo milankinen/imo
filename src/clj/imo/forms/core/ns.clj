@@ -241,5 +241,5 @@
                (s/* (a/node-spec :list "ns-clause" ns-clause-analyzer)))
         (s/as-analyzer analyze-ns))))
 
-(a/add-form-analyzer! 'clojure.core/ns ns-analyzer)
+(a/set-form-analyzer! 'clojure.core/ns ns-analyzer)
 
