@@ -76,7 +76,7 @@
         cli-overrides (if-let [overrides (get opts :config-edn)]
                         (parse-config (ByteArrayInputStream. (.getBytes ^String overrides)))
                         {})]
-    (config/merge-config user-config cli-overrides)))
+    (config/build-config user-config cli-overrides)))
 
 ; Caching
 

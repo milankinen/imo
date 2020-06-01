@@ -30,7 +30,7 @@
   {:pre [(node? ast)
          (= :$ (first ast))]}
   (timed "analysis"
-    (let [ctx (create-context {} {})]
+    (let [ctx (create-context (:resolve-as config) {})]
       (-> (analyze-with default-node-analyzer ctx ast)
           (second)))))
 
