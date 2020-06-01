@@ -424,22 +424,29 @@
   (defmethod layout type [node]
     (preserve node)))
 
-(def ^:private spaces-before-comment
-  (spaces 2))
+(defonce ^:private groupable-forms
+  (volatile! #{}))
+
+(defn mark-as-groupable!
+  "Marks the given form as groupable so that formatter won't enforce
+   empty new line between subsequent forms"
+  [form-name]
+  {:pre [(symbol? form-name)]}
+  (vswap! groupable-forms conj form-name))
 
 (defn- format-top-level-node! [^StringBuilder sb width node]
   (let [result (fit (layout node) width)
         code (render result)
-        resolved-as (:resolve-as (meta node))]
+        resolved-form (:resolve-as (meta node))]
     (.append sb ^String code)
-    (or (and (or (= 'def resolved-as)
-                 (= 'clojure.core/declare resolved-as))
-             (not (multiline? result)))
-        (= :meta (first node)))))
+    (contains? @groupable-forms resolved-form)))
 
 (defn- append-newlines! [^StringBuilder sb n]
   (dotimes [_ n]
     (.append sb "\n")))
+
+(def ^:private spaces-before-comment
+  (spaces 2))
 
 (defn format-root
   "Formats the given root ast node trying to fit the output
