@@ -197,8 +197,8 @@
   (letfn [(analyze-ns [ctx [_ _ ns-name-node _ _ & clause-nodes :as node]]
             (let [ns-name (second ns-name-node)
                   requires (mapcat (comp :requires meta) clause-nodes)
-                  aliases (keep (fn [{:keys [alias namespace]}]
-                                  (some-> alias (a/create-alias namespace)))
+                  aliases (keep (fn [{:keys [as namespace]}]
+                                  (some-> as (a/create-alias namespace)))
                                 requires)
                   clj-spec (first (keep #(let [m (meta %)]
                                            (when (= :refer-clojure (:clause m))
