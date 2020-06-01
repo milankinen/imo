@@ -15,8 +15,7 @@
   "Formats the entire project files"
   []
   (binding [*exit-jvm* false]
-    (-main "--config-edn" "{:cache false}"
-           "test/**/*.clj"
+    (-main "test/**/*.clj"
            "src/**/*.clj"
            "!test/__files__/*")))
 

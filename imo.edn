@@ -1,0 +1,3 @@
+{:width      80
+ :cache      false
+ :resolve-as {expound.alpha/defmsg clojure.spec.alpha/def}}
