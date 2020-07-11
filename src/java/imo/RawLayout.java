@@ -44,13 +44,8 @@ public class RawLayout extends Layout {
   }
 
   @Override
-  public Keyword kind() {
-    return KIND;
-  }
-
-  @Override
-  public ISeq inspectChildren() {
-    return PersistentVector.create(_content).seq();
+  public IPersistentVector inspect() {
+    return PersistentVector.create(KIND, _content);
   }
 
   @Override

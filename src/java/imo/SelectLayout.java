@@ -35,21 +35,12 @@ public class SelectLayout extends Layout {
   }
 
   @Override
-  public Keyword kind() {
-    return KIND;
-  }
-
-  @Override
-  public ISeq inspectChildren() {
-    return PersistentVector.create(_selected).seq();
-  }
-
-  @Override
-  public IPersistentMap inspectProps() {
-    return PersistentArrayMap.create(Map.of(
+  public IPersistentVector inspect() {
+    IPersistentMap props = PersistentArrayMap.create(Map.of(
         SELECTOR_FN, _selector,
         STAGED_CHILDREN, _children
     ));
+    return PersistentVector.create(KIND, props, _selected);
   }
 
   @Override

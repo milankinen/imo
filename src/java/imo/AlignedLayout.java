@@ -80,13 +80,8 @@ public class AlignedLayout extends Layout {
   }
 
   @Override
-  public Keyword kind() {
-    return KIND;
-  }
-
-  @Override
-  public ISeq inspectChildren() {
-    return _children.seq();
+  public IPersistentVector inspect() {
+    return _children.cons(KIND);
   }
 
   @Override

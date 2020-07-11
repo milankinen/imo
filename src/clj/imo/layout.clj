@@ -21,16 +21,25 @@
    :multiline?                 (Layout/isMultiline bits)})
 
 ; For REPL debugging purposes
-(defmethod print-method Layout [^Layout layout ^Writer writer]
-  (let [kind (.kind layout)
+
+(defn inspect
+  "Returns some details from the node in a hiccup form.
+   For development purposes only"
+  [^Layout layout]
+  (let [[kind & props+children] (.inspect layout)
         props (merge (bits->props (.-bits layout))
-                     (.inspectProps layout))
-        children (.inspectChildren layout)
-        node (if (and (= :raw kind)
-                      (not (:multiline? props)))
-               [:raw (first children)]
-               (into [kind props] children))
-        s (pr-str node)]
+                     (when (map? (first props+children))
+                       (first props+children)))
+        children (if (map? (first props+children))
+                   (next props+children)
+                   props+children)]
+    (if (and (= :raw kind)
+             (not (:multiline? props)))
+      [:raw (first children)]
+      (into [kind props] children))))
+
+(defmethod print-method Layout [^Layout layout ^Writer writer]
+  (let [s (pr-str (inspect layout))]
     (.write writer ^String s)))
 
 (defn- shrink*
@@ -378,8 +387,7 @@
                absolute?
                0)]
     (proxy [Layout] [bits nil]
-      (kind [] :preserve)
-      (inspectChildren [] (seq [(string/join "\n" lines)]))
+      (inspect [] [:preserve (string/join "\n" lines)])
       (shrink [_ _ _ _]
         (throw (AssertionError. "not shrinkable")))
       (print [^StringBuilder sb offset]

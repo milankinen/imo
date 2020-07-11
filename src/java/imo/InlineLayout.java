@@ -2,7 +2,7 @@ package imo;
 
 import clojure.lang.*;
 
-import static imo.Util.*;
+import static imo.Util.concat;
 
 public class InlineLayout extends Layout {
   public static final Keyword KIND = Keyword.intern("inline");
@@ -107,13 +107,8 @@ public class InlineLayout extends Layout {
   }
 
   @Override
-  public Keyword kind() {
-    return KIND;
-  }
-
-  @Override
-  public ISeq inspectChildren() {
-    return _children.seq();
+  public IPersistentVector inspect() {
+    return _children.cons(KIND);
   }
 
   @Override

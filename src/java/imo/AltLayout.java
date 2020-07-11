@@ -40,21 +40,11 @@ public class AltLayout extends Layout {
   }
 
   @Override
-  public Keyword kind() {
-    return KIND;
-  }
-
-  @Override
-  public ISeq inspectChildren() {
-    return PersistentVector.create(_primary).seq();
-  }
-
-  @Override
-  public IPersistentMap inspectProps() {
-    return PersistentArrayMap.create(Map.of(
+  public IPersistentVector inspect() {
+    return PersistentVector.create(KIND, PersistentArrayMap.create(Map.of(
         SECONDARY_FN, _secondary,
         SECONDARY_PRECEDENCE, _secondaryPrecedence
-    ));
+    )));
   }
 
   @Override

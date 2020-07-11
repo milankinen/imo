@@ -1,6 +1,8 @@
 package imo;
 
-import clojure.lang.*;
+import clojure.lang.IObj;
+import clojure.lang.IPersistentMap;
+import clojure.lang.IPersistentVector;
 
 public abstract class Layout implements IObj {
   public static final long MULTILINE_BIT = 1L << 63;
@@ -18,17 +20,11 @@ public abstract class Layout implements IObj {
     this._meta = meta;
   }
 
-  public abstract Keyword kind();
-
-  public abstract ISeq inspectChildren();
-
-  public IPersistentMap inspectProps() {
-    return null;
-  }
-
   public abstract Layout shrink(int offset, int alignment, int targetWidth, int targetPrecedence);
 
   public abstract void print(StringBuilder sb, int offset);
+
+  public abstract IPersistentVector inspect();
 
   @Override
   public IPersistentMap meta() {
