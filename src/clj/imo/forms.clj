@@ -1,9 +1,11 @@
 (ns imo.forms
   (:require
-    [imo.forms.core.def]
-    [imo.forms.core.fn]
-    [imo.forms.core.if]
-    [imo.forms.core.let]
-    [imo.forms.core.ns]
-    [imo.forms.core.seq-exprs]
-    [imo.forms.spec.def]))
+    ;; clojure.core
+    [imo.forms.clojure.core.def]
+    [imo.forms.clojure.core.fn]
+    [imo.forms.clojure.core.if]
+    [imo.forms.clojure.core.let]
+    [imo.forms.clojure.core.ns]
+    [imo.forms.clojure.core.seq-exprs]
+    ;; clojure.spec.alpha
+    [imo.forms.clojure.spec.alpha.def]))

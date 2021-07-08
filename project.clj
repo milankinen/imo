@@ -8,7 +8,7 @@
                  [org.clojure/tools.cli "1.0.194"]
                  [com.cognitect/transit-clj "1.0.324"]
                  [io.github.java-diff-utils/java-diff-utils "4.7"]
-                 [expound "0.8.4"]]
+                 [expound "0.8.5"]]
   :main ^:skip-aot imo.main
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]

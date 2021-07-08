@@ -1,6 +1,6 @@
 (ns imo.core
   (:refer-clojure :exclude [read format])
-  (:require [imo.analysis :refer [create-context analyze-with default-node-analyzer]]
+  (:require [imo.analysis.core :refer [analyze-root]]
             [imo.layout :refer [format-root]]
             [imo.logger :refer [timed]]
             [imo.util :refer [node? split-lines]]
@@ -30,9 +30,7 @@
   {:pre [(node? ast)
          (= :$ (first ast))]}
   (timed "analysis"
-    (let [ctx (create-context (:resolve-as config) {})]
-      (-> (analyze-with default-node-analyzer ctx ast)
-          (second)))))
+    (analyze-root (or (:resolve-as config) {}) ast)))
 
 (defn format
   "Formats the given root ast node and returns the formatted source as string"

@@ -27,9 +27,9 @@
   {:pre [(keyword? node-type)]}
   (AstNode/getEndChars node-type))
 
-(defn simple-symbol-str? [s]
+(defn simple-name-str? [s]
   {:pre [(string? s)]}
-  (Util/isSimpleSymbolStr s))
+  (Util/isSimpleNameStr s))
 
 (defn node->source [node]
   {:pre [(node? node)]}

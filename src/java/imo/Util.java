@@ -26,7 +26,7 @@ public class Util {
     }
   }
 
-  public static boolean isSimpleSymbolStr(String s) {
+  public static boolean isSimpleNameStr(String s) {
     int i = s.indexOf('/');
     return i == -1 || "/".equals(s);
   }

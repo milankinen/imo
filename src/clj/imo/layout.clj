@@ -316,7 +316,7 @@
 
 (defn -|
   "Convenience function for producing an aligned and
-   indended layout from the given variadric lines"
+q   indended layout from the given variadric lines"
   [& lines]
   (-|* lines))
 

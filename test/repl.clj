@@ -39,25 +39,29 @@
   "Set to `true` to print **all** ast data with `pr-ast`"
   false)
 
-(defn pr-ast
-  "Prints data and metadata from the given ast node"
-  [ast]
-  {:pre [(node? ast)]}
-  ; pprint does not support meta so extract it and place
-  ; it to the beginning of ast node
+(defn explain [node]
+  {:pre [(node? node)]}
   (letfn [(process-meta [m]
             (if-not *print-all*
               (dissoc m :imo/node :pre :post :line :col)
-              m))
-          (lift-meta [x]
-            (postwalk #(if (and (vector? %) (not (map-entry? %)))
-                         (let [m (process-meta (or (lift-meta (meta %)) {}))]
-                           (if (seq m)
-                             (into [(first %) m] (rest %))
-                             (into [(first %)] (rest %))))
-                         %)
-                      x))]
-    (pp/pprint (lift-meta ast))))
+              m))]
+    (postwalk (fn walk [x]
+                (if (and (vector? x) (not (map-entry? x)))
+                  (let [m (process-meta (or (walk (meta x)) {}))]
+                    (if (seq m)
+                      (into [(first x) m] (rest x))
+                      (into [(first x)] (rest x))))
+                  x))
+              node)))
+
+(defmacro explain* [& body]
+  `(explain (ast* ~@body)))
+
+(defn pr-ast
+  "Prints explained data (and metadata) from the given ast node"
+  [ast]
+  {:pre [(node? ast)]}
+  (pp/pprint (explain ast)))
 
 (def clj-core
   (delay (load-test-file "clojure_core.clj")))
