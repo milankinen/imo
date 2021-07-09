@@ -4,6 +4,7 @@
 ;; shared
 (a/defspec ::init-expr (a/named ::a/any "init expression"))
 (a/defspec ::binding [::a/any-binding ::init-expr])
+
 (a/defspec ::seq-expr-bindings
   (a/vec-node
     (a/* [::binding (a/* (a/alt [":let" ::a/bindings-vec]

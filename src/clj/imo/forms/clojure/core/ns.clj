@@ -11,6 +11,7 @@
          [":exclude" (a/vec-node (a/* ::a/simple-symbol))]
          [":rename" (a/map-node (a/* [::a/simple-symbol ::a/simple-symbol]))]
          ::a/keyword))
+
 (a/defspec ::refer-clojure [":refer-clojure" (a/* ::refer-clojure-filter)])
 
 ;; :require
@@ -54,6 +55,7 @@
 (a/defspec ::doc-str (a/named (a/? ::a/string) "doc string"))
 (a/defspec ::attrs-map (a/named (a/? ::a/map) "attrs map"))
 (a/defspec ::ns-name (a/named ::a/simple-symbol "ns name"))
+
 (a/defspec ::ns-clause
   (a/named
     (a/list-node
@@ -61,6 +63,7 @@
              ::require
              ::import))
     "ns clause"))
+
 (a/defspec ::ns [::a/symbol ::ns-name ::doc-str ::attrs-map (a/* ::ns-clause)])
 
 (defn- flatten-reader-conds [[node-type & children :as node]]
