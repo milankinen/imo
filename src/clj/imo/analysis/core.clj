@@ -496,13 +496,17 @@
 (defspec ::local-keyword-binding (node #(= :keyword (first %)) "name to bind" bound-local-keyword-node-analyzer))
 
 ;; seq
-(defspec ::seq-binding.elems (* (alt ["&" (recursive ::any-binding)] (recursive ::any-binding))))
+(defspec ::seq-binding.elems (* (alt ["&" (recursive ::any-binding)]
+                                     [":as" (named ::local-sym-binding "alias")]
+                                     (recursive ::any-binding))))
+
 (defspec ::seq-binding (node #(= :vector (first %)) "sequence binding" #(analyze ::seq-binding.elems %1 %2)))
 
 ;; map
 (defspec ::map-binding.keys (* (alt ::local-sym-binding ::local-keyword-binding)))
 (defspec ::map-binding.syms (* ::local-sym-binding))
 (defspec ::map-binding.strs (* ::local-sym-binding))
+
 (defspec ::map-binding.elems (* (alt [":keys" (node #(= :vector (first %)) "keys" #(analyze ::map-binding.keys %1 %2))]
                                      [":as" (named ::local-sym-binding "alias")]
                                      [":or" (named ::map "defaults map")]
@@ -526,6 +530,7 @@
                                       (named (vec-node ::map-binding.strs) "strs")]
                                      ; {foo :foo}
                                      [(recursive ::any-binding) ::any])))
+
 (defspec ::map-binding (node #(= :map (first %)) "map binding" #(analyze ::map-binding.elems %1 %2)))
 
 ;; any
