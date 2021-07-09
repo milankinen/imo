@@ -199,9 +199,9 @@
         n-changed (atom 0)
         start-t (System/nanoTime)]
     (with-open [cache ^Closeable (open-cache config true)]
-      (doseq [[in out name] inputs+outputs]
+      (doseq [[in out name path] inputs+outputs]
         (binding [logger/*current-file* name]
-          (v "format file")
+          (v "format file " path)
           (let [src-in (slurp in)]
             (if (cached? cache in src-in)
               (do (v "found from cached, skipping")
@@ -226,9 +226,9 @@
         n-cached (atom 0)
         start-t (System/nanoTime)]
     (with-open [cache ^Closeable (open-cache config false)]
-      (doseq [[in _ name] inputs+outputs]
+      (doseq [[in _ name path] inputs+outputs]
         (binding [logger/*current-file* name]
-          (v "check file")
+          (v "check file " path)
           (let [src-in (slurp in)]
             (if (cached? cache in src-in)
               (do (v "found from cached, skipping")
@@ -271,8 +271,8 @@
         (-> (let [[files stdin?] (parse-files-seq arguments)
                   config (load-config options)
                   inputs+outputs (if-not stdin?
-                                   (map #(do [% % (.getName ^File %)]) files)
-                                   [[*in* *out* "STDIN"]])
+                                   (map #(do [% % (.getName ^File %) (.getPath ^File %)]) files)
+                                   [[*in* *out* "STDIN" "STDIN"]])
                   log-level (get options :verbosity 0)
                   check-mode? (true? (get options :check))]
               (binding [logger/*debug-out* (if stdin? *err* *out*)
