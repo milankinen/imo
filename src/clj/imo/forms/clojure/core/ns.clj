@@ -89,13 +89,16 @@
       (if opt
         (let [[libspec rem]
               (case (second opt)
-                ":refer" (let [refers (if (= ":all" (second (first xs)))
+                ":refer" (let [prev-refers (:refers libspec)
+                               refers (if (or (= ":all" (second (first xs)))
+                                              (= :all prev-refers))
                                         :all
                                         (->> (when-not (invalid? (first xs))
                                                (next (first xs)))
                                              (remove invalid?)
-                                             (map second)))]
-                           [(update libspec :refers #(concat % refers))
+                                             (map second)
+                                             (concat prev-refers)))]
+                           [(assoc libspec :refers refers)
                             (next xs)])
                 ":as" (let [alias (when-not (invalid? (first xs))
                                     (second (first xs)))]
