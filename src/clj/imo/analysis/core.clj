@@ -5,7 +5,7 @@
             [imo.util :refer [node? node->source simple-name-str?]]
             [imo.logger :refer [warn]]
             [clojure.string :as string])
-  (:import (imo AnalysisException SpecState)
+  (:import (imo AnalysisException AnalysisState)
            (clojure.lang IDeref)))
 
 ;;;; analysis core
@@ -99,9 +99,9 @@
 
 (defn- init-state [ctx node]
   (let [[node-type & children] node]
-    (SpecState. (transient [node-type]) children ctx)))
+    (AnalysisState. (transient [node-type]) children ctx)))
 
-(defn- flush-state! [^SpecState state]
+(defn- flush-state! [^AnalysisState state]
   (when-let [extra-node (first (.-remaining state))]
     (throw (analysis-ex "no more forms expected" extra-node)))
   (let [ctx (.-ctx state)
@@ -115,22 +115,22 @@
       (let [sorted (vec (sort expectation-set))]
         (str "expected " (string/join ", " (pop sorted)) " or " (peek sorted))))))
 
-(defn- peek-node [^SpecState state]
+(defn- peek-node [^AnalysisState state]
   (first (.-remaining state)))
 
-(defn- advance! [^SpecState state]
+(defn- advance! [^AnalysisState state]
   (set! (.-remaining state) (next (.-remaining state))))
 
-(defn- push-analyzed! [^SpecState state analyzed]
+(defn- push-analyzed! [^AnalysisState state analyzed]
   (set! (.-analyzed state) (conj! (.-analyzed state) analyzed)))
 
-(defn- get-ctx [^SpecState state]
+(defn- get-ctx [^AnalysisState state]
   (.-ctx state))
 
-(defn- set-ctx! [^SpecState state ctx]
+(defn- set-ctx! [^AnalysisState state ctx]
   (set! (.-ctx state) ctx))
 
-(defn- spec-ex [^Spec spec ^SpecState state]
+(defn- spec-ex [^Spec spec ^AnalysisState state]
   (let [msg (expectations->message (.expectations spec))
         caused-by (peek-node state)]
     (analysis-ex msg caused-by)))
@@ -324,7 +324,7 @@
    an `AnalysisException` if analysis fails for some reason."
   [spec ctx node]
   (let [spec ^Spec (specify spec)
-        state ^SpecState (init-state ctx node)]
+        state ^AnalysisState (init-state ctx node)]
     (if-let [accepted ^Spec (.accept spec (peek-node state))]
       (do (.advance accepted state true)
           (flush-state! state))
