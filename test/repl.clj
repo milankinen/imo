@@ -41,18 +41,20 @@
 
 (defn explain [node]
   {:pre [(node? node)]}
-  (letfn [(process-meta [m]
-            (if-not *print-all*
-              (dissoc m :imo/node :pre :post :line :col)
-              m))]
-    (postwalk (fn walk [x]
-                (if (and (vector? x) (not (map-entry? x)))
-                  (let [m (process-meta (or (walk (meta x)) {}))]
-                    (if (seq m)
-                      (into [(first x) m] (rest x))
-                      (into [(first x)] (rest x))))
-                  x))
-              node)))
+  (letfn [(walk [value]
+            (postwalk (fn [x]
+                        (if (node? x)
+                          (let [m (meta x)
+                                m (if-not *print-all*
+                                    (dissoc m :imo/node :pre :post :line :col)
+                                    m)
+                                m (walk m)]
+                            (if (seq m)
+                              (into [(first x) m] (rest x))
+                              (into [(first x)] (rest x))))
+                          x))
+                      value))]
+    (walk node)))
 
 (defmacro explain* [& body]
   `(explain (ast* ~@body)))
