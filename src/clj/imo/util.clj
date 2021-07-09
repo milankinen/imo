@@ -9,8 +9,8 @@
   {:pre [(string? s)]}
   (string/split s #"\n" -1))
 
-(defn spaces [n]
-  {:pre [(nat-int? n)]}
+(defn ^String spaces [n]
+  {:pre [(integer? n)]}
   (if (pos-int? n)
     (Util/spaces n)
     ""))

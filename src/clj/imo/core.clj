@@ -1,7 +1,7 @@
 (ns imo.core
   (:refer-clojure :exclude [read format])
   (:require [imo.analysis.core :refer [analyze-root]]
-            [imo.layout :refer [format-root]]
+            [imo.formatting :refer [format-root]]
             [imo.logger :refer [timed]]
             [imo.util :refer [node? split-lines]]
             [imo.forms])

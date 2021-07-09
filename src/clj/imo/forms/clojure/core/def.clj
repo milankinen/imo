@@ -16,7 +16,6 @@
 
 (a/defform 'clojure.core/defonce #(a/analyze ::def %1 %2))
 
-
 (comment
 
   (repl/explain*
