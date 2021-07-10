@@ -1,10 +1,8 @@
 (ns repl
   (:require [imo.main :refer [-main *exit-jvm*]]
-            [imo.core :as imo]
             [imo.logger :refer [timed] :as logger]
-            [imo.test-utils :refer [load-test-file]]
+            [test-utils :refer [load-test-file analyze*]]
             [imo.util :refer [node?]]
-            [clojure.string :as string]
             [clojure.walk :refer [postwalk]]
             [clojure.pprint :as pp]
             [imo.config :as config]))
@@ -19,27 +17,13 @@
            "src/**/*.clj"
            "!test/__files__/*")))
 
-(defn ast
-  "Reads and and analyzes an ast from the given source string"
-  [s]
-  (->> (string/split-lines s)
-       (map #(string/replace % #"^\s*\|" ""))
-       (string/join "\n")
-       (imo/read)
-       (imo/analyze config/defaults)))
-
-(defmacro ast*
-  "Reads and analyzes an ast from the given forms"
-  [& body]
-  `(->> ~(vec (map str body))
-        (string/join "\n")
-        (ast)))
-
 (def ^:dynamic *print-all*
   "Set to `true` to print **all** ast data with `pr-ast`"
   false)
 
-(defn explain [node]
+(defn explain
+  "Explains the analyzed ast node"
+  [node]
   {:pre [(node? node)]}
   (letfn [(walk [value]
             (postwalk (fn [x]
@@ -56,8 +40,10 @@
                       value))]
     (walk node)))
 
-(defmacro explain* [& body]
-  `(explain (ast* ~@body)))
+(defn explain*
+  "Explains the the given form after the form has been analyzed"
+  [& body]
+  (explain (apply analyze* body)))
 
 (defn pr-ast
   "Prints explained data (and metadata) from the given ast node"

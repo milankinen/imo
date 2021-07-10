@@ -1,10 +1,10 @@
-(ns imo.test.config-test
+(ns imo.config-tests
   (:require [clojure.test :refer :all]
             [clojure.data :refer [diff]]
             [imo.config :refer [defaults build-config]])
   (:import (imo ImoException)))
 
-(deftest config-merging-test
+(deftest config-merging
   (testing "using only defaults produces a valid config"
     (is (= defaults (build-config nil nil))))
   (testing "config file overrides defaults"
@@ -21,7 +21,7 @@
                :width      112}
              (second (diff defaults c)))))))
 
-(deftest symbol-resolution-building-test
+(deftest symbol-resolution-building
   (testing "symbols get resolved until fixed point is reached"
     (is (= '{foo/bar def
              foo/baz lol/baz

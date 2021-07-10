@@ -19,12 +19,12 @@
 (comment
 
   (repl/explain*
-    (def foo
-      "this is a doc-str"
-      123))
+    '(def foo
+       "this is a doc-str"
+       123))
 
   (repl/explain*
-    (defonce lol
-      "bal"))
+    '(defonce lol
+       "bal"))
 
   '-)

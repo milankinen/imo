@@ -1,7 +1,7 @@
-(ns imo.test.reader-tests
+(ns imo.reader-tests
   (:refer-clojure :exclude [read])
   (:require [clojure.test :refer :all]
-            [imo.test-utils :refer [src inspect]]
+            [test-utils :refer [src inspect]]
             [imo.core :as imo]))
 
 (defn- read
@@ -16,7 +16,7 @@
 (def ^:private no-line-col {:drop-keys [:imo/node :line :col]})
 (def ^:private no-meta {:meta? false})
 
-(deftest leaf-nodes-reading-test
+(deftest leaf-nodes-reading
   (testing "all clojure primitives are supported"
     (is (= [:$
             [:number "123"]
@@ -43,7 +43,7 @@
                   | \\space
                   |" no-meta)))))
 
-(deftest whitespace-reading-test
+(deftest whitespace-reading
   (testing "all whitespaces, comments and discards prior to node are marked as :pre"
     (is (= '[:$ {}
              [:symbol {:pre ([:comment {} "; this is a comment\n"]
@@ -92,7 +92,7 @@
               "bar"]]
            (read "|bar #_lol ;bal" no-line-col)))))
 
-(deftest line-col-annotations-test
+(deftest line-col-annotations
   (testing "line and column info is added to all read nodes"
     (is (= '[:$ {:col  1
                  :line 1}
@@ -128,7 +128,7 @@
                "bar"]]
              (read "\tbar" (assoc line-col :tab-size tab-size)))))))
 
-(deftest collection-nodes-reading-test
+(deftest collection-nodes-reading
   (testing "all clojure collections are supported"
     (is (= [:$
             [:list [:number "1"] [:number "2"]]
@@ -177,7 +177,7 @@
                                [:space {} " "])}]
            (last (read "[ \n ]" no-line-col))))))
 
-(deftest macros-reading-test
+(deftest macros-reading
   (testing "all basic macros are supported"
     (is (= [:$
             [:deref [:symbol "val"]]
@@ -208,7 +208,7 @@
                   | ##Inf
                   " no-meta)))))
 
-(deftest metadata-reading-test
+(deftest metadata-reading
   (testing "symbol, keyword and map metadatas are supported"
     (is (= '[:$ {}
              [:vector

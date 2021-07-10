@@ -27,7 +27,7 @@
   :aliases {"i"            ["do"
                             ["with-profile" "+dev,+test" "deps"]
                             ["with-profile" "+dev,+test" "deps" ":tree"]]
-            "test"         ["with-profile" "+dev,+test,+clitest" "trampoline" "run" "-m" "imo.test-runner/run-from-cli!"]
+            "test"         ["with-profile" "+dev,+test,+clitest" "trampoline" "run" "-m" "test-runner/run-from-cli!"]
             "t"            "test"
             "native-image" ["do"
                             ["shell" "./scripts/setup_graalvm.sh"]

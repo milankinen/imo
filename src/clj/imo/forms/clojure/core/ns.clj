@@ -286,11 +286,11 @@
 (comment
 
   (repl/explain*
-    (ns imo.forms.clojure.core.ns
-      (:require [imo.analysis.core :as a :refer [foo bar]]
-                imo.main
-                [imo.main]
-                "react")))
+    '(ns imo.forms.clojure.core.ns
+       (:require [imo.analysis.core :as a :refer [foo bar]]
+                 imo.main
+                 [imo.main]
+                 "react")))
 
   (-> (repl/ast "(ns foo
                    #?(:cljs (:require \"react\")))")
@@ -303,21 +303,21 @@
 
 
   (repl/explain*
-    (ns imo.forms.clojure.core.ns
-      (:refer-clojure :exclude [dec] :rename {inc plus})
-      (:require [imo.analysis.spec :as s]
-                [imo.util :refer [start-of node?]]
-                [imo.logger :refer [warn]]
-                [imo.analysis :as a]
-                (imo [core :as core]
-                     [config :as config])
-                imo.main
-                [clojure.string :as string]))
-    (string/join "," [])
-    (start-of 1)
-    (println config/defaults)
-    (plus 1)
-    (dec 1))
+    '(ns imo.forms.clojure.core.ns
+       (:refer-clojure :exclude [dec] :rename {inc plus})
+       (:require [imo.analysis.spec :as s]
+                 [imo.util :refer [start-of node?]]
+                 [imo.logger :refer [warn]]
+                 [imo.analysis :as a]
+                 (imo [core :as core]
+                      [config :as config])
+                 imo.main
+                 [clojure.string :as string]))
+    '(string/join "," [])
+    '(start-of 1)
+    '(println config/defaults)
+    '(plus 1)
+    '(dec 1))
 
 
   '-)

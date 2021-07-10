@@ -28,15 +28,15 @@
 (comment
 
   (repl/explain*
-    (for [a [1 2 3]
-          :when (odd? a)
-          :let [b (inc a)]]
-      b))
+    '(for [a [1 2 3]
+           :when (odd? a)
+           :let [b (inc a)]]
+       b))
 
   (repl/explain*
-    (for [_ [1 2 3]
-          a [1 2 3]
-          :let [b (inc a)]]
-      b))
+    '(for [_ [1 2 3]
+           a [1 2 3]
+           :let [b (inc a)]]
+       b))
 
   -)

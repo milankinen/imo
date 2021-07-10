@@ -13,12 +13,12 @@
 (comment
 
   (repl/explain*
-    (if foo
-      "lol"
-      "bal"))
+    '(if foo
+       "lol"
+       "bal"))
 
   (repl/explain*
-    (if (= 1 2)
-      "lol"))
+    '(if (= 1 2)
+       "lol"))
 
   '-)

@@ -1,8 +1,10 @@
-(ns imo.test-utils
+(ns test-utils
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.walk :refer [postwalk]]
-            [imo.util :refer [node?]]))
+            [imo.util :refer [node?]]
+            [imo.core :as imo]
+            [imo.config :as config]))
 
 (defn load-test-file
   "Loads the contents of the given test file and returns
@@ -24,6 +26,25 @@
    from new line"
   [& forms]
   (string/join "\n" (map str forms)))
+
+(defn analyze
+  "Reads and and analyzes an ast from the given source string using"
+  ([s] (analyze s config/defaults))
+  ([s config]
+   {:pre [(string? s)]}
+   (->> (string/split-lines s)
+        (map #(string/replace % #"^\s*\|" ""))
+        (string/join "\n")
+        (imo/read)
+        (imo/analyze config))))
+
+(defn analyze*
+  "Reads and analyzes an ast from the given forms using the default
+   configuration"
+  [& forms]
+  (->> (vec (map str forms))
+       (string/join "\n")
+       (analyze)))
 
 (defn inspect
   "Reveals node's metadata as hiccup style 'props map' for

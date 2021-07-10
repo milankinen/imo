@@ -25,32 +25,32 @@
 (comment
 
   (repl/explain*
-    (fn [foo {:keys [bar] :or {bar 1}}]
-      (inc foo)
-      (inc bar)))
+    '(fn [foo {:keys [bar] :or {bar 1}}]
+       (inc foo)
+       (inc bar)))
 
   (repl/explain*
-    (fn [foo & [inc]]
-      (inc foo)
-      (inc bar)))
+    '(fn [foo & [inc]]
+       (inc foo)
+       (inc bar)))
 
   (repl/explain*
-    (fn lol [foo bar]
-      (lol foo bar)))
+    '(fn lol [foo bar]
+       (lol foo bar)))
 
   (repl/explain*
-    (fn lol
-      ([foo] (inc foo))
-      ([foo bar] (+ foo bar))))
+    '(fn lol
+       ([foo] (inc foo))
+       ([foo bar] (+ foo bar))))
 
   (repl/explain*
-    (defn lol
-      "bal"
-      [] 123))
+    '(defn lol
+       "bal"
+       [] 123))
 
   (repl/explain*
-    (defn lol
-      ([] 123)
-      ([a] a)))
+    '(defn lol
+       ([] 123)
+       ([a] a)))
 
   -)
