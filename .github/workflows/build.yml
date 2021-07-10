@@ -2,9 +2,10 @@ name: Build
 on: push
 jobs:
   check-dependencies:
-    name: Check dependency versions
+    name: Check outdated dependency versions
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
       - name: Cache dependencies
         uses: actions/cache@v2
         with:
@@ -16,12 +17,29 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@master
         with:
           lein: 2.9.6
-      - uses: actions/checkout@v2
       - run: lein ancient
   run-tests:
-    name: Run test suites
+    name: Run tests
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2
+          key: deps-${{ runner.os }}-${{ hashFiles('project.clj') }}
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "11"
+      - uses: DeLaGuardo/setup-clojure@master
+        with:
+          lein: 2.9.6
+      - run: lein t
+  build-native-image:
+    name: Build native image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
       - name: Cache dependencies
         uses: actions/cache@v2
         with:
@@ -38,9 +56,6 @@ jobs:
       - uses: DeLaGuardo/setup-clojure@master
         with:
           lein: 2.9.6
-      - uses: actions/checkout@v2
       - run: |
-          lein t
           lein native-image
-          # Smoke test for native image
-          echo "(ns foo.bar)" | target/native/imo-linux-amd64 -
+          echo "(ns smoke.test)" | target/native/imo-linux-amd64 -
