@@ -465,6 +465,14 @@
   (let [spec (specify spec)]
     (node #(= :vector (first %)) "vector" #(analyze spec %1 %2))))
 
+(defn seq-node [spec]
+  (let [spec (specify spec)]
+    (node #(let [type (first %)]
+             (or (= :vector type)
+                 (= :list type)))
+          "vector or list"
+          #(analyze spec %1 %2))))
+
 (defn map-node [spec]
   (let [spec (specify spec)]
     (node #(= :map (first %)) "map" #(analyze spec %1 %2))))

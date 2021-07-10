@@ -8,8 +8,8 @@
 ;; :refer-clojure
 
 (a/defspec ::refer-clojure-filter
-  (a/alt [":only" (a/vec-node (a/* ::a/simple-symbol))]
-         [":exclude" (a/vec-node (a/* ::a/simple-symbol))]
+  (a/alt [":only" (a/seq-node (a/* ::a/simple-symbol))]
+         [":exclude" (a/seq-node (a/* ::a/simple-symbol))]
          [":rename" (a/map-node (a/* [::a/simple-symbol ::a/simple-symbol]))]
          ::a/keyword))
 
@@ -24,7 +24,8 @@
       [(a/alt ::a/simple-symbol
               ::a/string)
        (a/* (a/alt [":as" ::a/simple-symbol]
-                   [":refer" (a/alt ":all" (a/vec-node (a/* ::a/simple-symbol)))]
+                   [":refer" (a/alt ":all" (a/seq-node (a/* ::a/simple-symbol)))]
+                   [":only" (a/seq-node (a/* ::a/simple-symbol))]
                    [":rename" (a/map-node (a/* [::a/simple-symbol ::a/simple-symbol]))]
                    ::a/keyword))])
     "libspec"))
@@ -53,10 +54,8 @@
     ;; e.g. java.util.regex.Pattern
     (a/named ::a/simple-symbol "class name")
     ;; e.g. (java.util.regex Pattern Matcher)
-    (a/list-node [(a/named ::a/simple-symbol "package name")
-                  (a/+ (a/named ::a/simple-symbol "class name"))])
-    ;; e.g. [java.util.regex Pattern Matcher]
-    (a/vec-node [(a/named ::a/simple-symbol "package name")
+    ;;      [java.util.regex Pattern Matcher]
+    (a/seq-node [(a/named ::a/simple-symbol "package name")
                  (a/+ (a/named ::a/simple-symbol "class name"))])))
 
 (a/defspec ::import
@@ -67,6 +66,11 @@
   [":gen-class" (a/* [(a/named ::a/keyword "gen-class option name")
                       (a/named ::a/any "gen-class option value")])])
 
+;; :load
+(a/defspec ::load [":load" (a/* (a/named ::a/string "path"))])
+
+;; :use
+(a/defspec ::use [":use" (a/* ::required-lib)])
 
 ;; ns
 (a/defspec ::doc-str (a/named (a/? ::a/string) "doc string"))
@@ -79,7 +83,9 @@
       (a/alt ::refer-clojure
              ::require
              ::import
-             ::gen-class))
+             ::gen-class
+             ::load
+             ::use))
     "ns clause"))
 
 (a/defspec ::ns [::a/symbol ::ns-name ::doc-str ::attrs-map (a/* ::ns-clause)])
@@ -98,11 +104,12 @@
 (defn- invalid? [node]
   (:invalid? (meta node)))
 
-(defn- direct-ns->libspecs [[type s]]
-  [{:lib s
-    :js? (= :string type)}])
+(defn- direct-ns->libspecs [clause-type [type s]]
+  [{:lib    s
+    :js?    (= :string type)
+    :refers (if (= :use clause-type) :all [])}])
 
-(defn- vec->libspecs [[_ [lib-type lib-name :as lib] & opts+flags]]
+(defn- vec->libspecs [clause-type [_ [lib-type lib-name :as lib] & opts+flags]]
   (when-not (invalid? lib)
     (loop [libspec {:lib lib-name
                     :js? (= :string lib-type)}
@@ -110,17 +117,17 @@
       (if opt
         (let [[libspec rem]
               (case (second opt)
-                ":refer" (let [prev-refers (:refers libspec)
-                               refers (if (or (= ":all" (second (first xs)))
-                                              (= :all prev-refers))
-                                        :all
-                                        (->> (when-not (invalid? (first xs))
-                                               (next (first xs)))
-                                             (remove invalid?)
-                                             (map second)
-                                             (concat prev-refers)))]
-                           [(assoc libspec :refers refers)
-                            (next xs)])
+                (":only" ":refer") (let [prev-refers (:refers libspec)
+                                          refers (if (or (= ":all" (second (first xs)))
+                                                         (= :all prev-refers))
+                                                   :all
+                                                   (->> (when-not (invalid? (first xs))
+                                                          (next (first xs)))
+                                                        (remove invalid?)
+                                                        (map second)
+                                                        (concat prev-refers)))]
+                                      [(assoc libspec :refers refers)
+                                       (next xs)])
                 ":as" (let [alias (when-not (invalid? (first xs))
                                     (second (first xs)))]
                         [(assoc libspec :alias alias)
@@ -137,24 +144,27 @@
                              (next xs)])
                 [libspec xs])]
           (recur libspec rem))
-        [libspec]))))
+        (if (and (= :use clause-type)
+                 (not (contains? libspec :refers)))
+          [(assoc libspec :refers :all)]
+          [libspec])))))
 
-(defn- prefix-list->libspecs [[_ prefix & xs]]
+(defn- prefix-list->libspecs [clause-type [_ prefix & xs]]
   (when-not (invalid? prefix)
     (let [prefix-s (second prefix)]
       (->> (remove invalid? xs)
            (mapcat #(case (first %)
-                      (:symbol :string) (direct-ns->libspecs %)
-                      :vector (vec->libspecs %)))
+                      (:symbol :string) (direct-ns->libspecs clause-type %)
+                      :vector (vec->libspecs clause-type %)))
            (remove :js?)
            (map (fn [{:keys [lib] :as libspec}]
                   (assoc libspec :lib (str prefix-s "." lib))))))))
 
-(defn- require->libspecs [req]
-  (case (first req)
-    (:symbol :string) (direct-ns->libspecs req)
-    :vector (vec->libspecs req)
-    :list (prefix-list->libspecs req)))
+(defn- required-lib->libspecs [clause-type lib]
+  (case (first lib)
+    (:symbol :string) (direct-ns->libspecs clause-type lib)
+    :vector (vec->libspecs clause-type lib)
+    :list (prefix-list->libspecs clause-type lib)))
 
 (defn- single-class-import->bindings [[_ fq-class-name-s]]
   (let [class-name-s (peek (string/split fq-class-name-s #"\."))]
@@ -230,10 +240,14 @@
                        (remove invalid?))
           clj-refers (->> (first (filter #(= ":refer-clojure" (second (second %))) clauses))
                           (collect-clj-refers ctx))
-          libspecs (->> (filter #(= ":require" (second (second %))) clauses)
-                        (mapcat nnext)
-                        (remove invalid?)
-                        (mapcat require->libspecs))
+          libspecs (concat (->> (filter #(= ":require" (second (second %))) clauses)
+                                (mapcat nnext)
+                                (remove invalid?)
+                                (mapcat #(required-lib->libspecs :require %)))
+                           (->> (filter #(= ":use" (second (second %))) clauses)
+                                (mapcat nnext)
+                                (remove invalid?)
+                                (mapcat #(required-lib->libspecs :use %))))
           user-imports (->> (filter #(= ":import" (second (second %))) clauses)
                             (mapcat nnext)
                             (remove invalid?)
