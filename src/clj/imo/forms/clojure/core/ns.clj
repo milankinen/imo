@@ -2,7 +2,8 @@
   (:require [imo.analysis.core :as a]
             [imo.analysis.context :as ctx]
             [imo.logger :refer [warn]]
-            [imo.config :as config]))
+            [imo.config :as config]
+            [clojure.string :as string]))
 
 ;; :refer-clojure
 
@@ -47,9 +48,19 @@
 (a/defspec ::require [":require" (a/* ::required-lib)])
 
 ;; :import
-; TODO
+(a/defspec ::imports
+  (a/alt
+    ;; e.g. java.util.regex.Pattern
+    (a/named ::a/simple-symbol "class name")
+    ;; e.g. (java.util.regex Pattern Matcher)
+    (a/list-node [(a/named ::a/simple-symbol "package name")
+                  (a/+ (a/named ::a/simple-symbol "class name"))])
+    ;; e.g. [java.util.regex Pattern Matcher]
+    (a/vec-node [(a/named ::a/simple-symbol "package name")
+                 (a/+ (a/named ::a/simple-symbol "class name"))])))
+
 (a/defspec ::import
-  [":import"])
+  [":import" (a/* ::imports)])
 
 ;; ns
 (a/defspec ::doc-str (a/named (a/? ::a/string) "doc string"))
@@ -138,6 +149,27 @@
     :vector (vec->libspecs req)
     :list (prefix-list->libspecs req)))
 
+(defn- single-class-import->bindings [[_ fq-class-name-s]]
+  (let [class-name-s (peek (string/split fq-class-name-s #"\."))]
+    (for [;; "." = constructor
+          suffix ["" "."]
+          :let [local-sym (symbol (str class-name-s suffix))
+                fq-sym (symbol (str fq-class-name-s suffix))]]
+      (ctx/create-binding local-sym fq-sym))))
+
+(defn- multi-class-imports->bindings [[_ [_ pkg-name-s] & class-name-nodes]]
+  (for [[_ class-name-s] class-name-nodes
+        suffix ["" "."]
+        :let [local-sym (symbol (str class-name-s suffix))
+              fq-sym (symbol (str pkg-name-s "." class-name-s suffix))]]
+    (ctx/create-binding local-sym fq-sym)))
+
+(defn imports->bindings [imports]
+  (case (first imports)
+    :symbol (single-class-import->bindings imports)
+    :vector (multi-class-imports->bindings imports)
+    :list (multi-class-imports->bindings imports)))
+
 (defn- collect-clj-refers [ctx [_ _ & refer-filters]]
   (loop [clj-spec {}
          [f & xs] refer-filters]
@@ -195,6 +227,10 @@
                         (mapcat nnext)
                         (remove invalid?)
                         (mapcat require->libspecs))
+          user-imports (->> (filter #(= ":import" (second (second %))) clauses)
+                            (mapcat nnext)
+                            (remove invalid?)
+                            (mapcat imports->bindings))
           user-refers (for [libspec libspecs
                             :when (not (:js? libspec))
                             :let [lib-s (:lib libspec)
@@ -216,7 +252,7 @@
                         :let [lib-s (:lib libspec)
                               alias (:alias libspec)]]
                     (ctx/create-alias (symbol alias) (symbol lib-s)))
-          bindings (concat clj-refers user-refers)]
+          bindings (concat ctx/default-import-bindings clj-refers user-refers user-imports)]
       (ctx/set-ns ctx ns-name aliases bindings))
     ctx))
 

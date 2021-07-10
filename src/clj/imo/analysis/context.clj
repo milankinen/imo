@@ -125,22 +125,34 @@
 (defn- indexed-bindings [bindings]
   (into {} (map (fn [b] [(name (:local-name b)) b]) bindings)))
 
+(def default-clj-core-bindings
+  (->> (get clj-exports/exports-map 'clojure.core)
+       (map #(create-binding % (symbol "clojure.core" (name %))))))
+
+(def default-import-bindings
+  (for [[import-sym fq-class-name-sym] clj-exports/default-ns-imports
+        suffix ["" "."]
+        :let [local-name (symbol (str import-sym suffix))
+              fq-name (symbol (str fq-class-name-sym suffix))]]
+    (create-binding local-name fq-name)))
+
+(def default-bindings
+  (-> (concat default-clj-core-bindings default-import-bindings)
+      (indexed-bindings)))
+
 (defn create-context
   "Creates fresh context with the given custom symbol resolutions
    and namespace exports"
   [symbol-resolution ns-exports]
   {:pre [(map? symbol-resolution)
          (map? ns-exports)]}
-  (let [bindings (->> (get clj-exports/exports-map 'clojure.core)
-                      (map #(create-binding % (symbol "clojure.core" (name %))))
-                      (indexed-bindings))]
-    (-> {:current-ns     "user"
-         :scope          (->Scope nil bindings)
-         :aliases        {}
-         :sym-resolution symbol-resolution
-         :mode           :eval
-         :recur-target   nil}
-        (map->Context))))
+  (-> {:current-ns     "user"
+       :scope          (->Scope nil default-bindings)
+       :aliases        {}
+       :sym-resolution symbol-resolution
+       :mode           :eval
+       :recur-target   nil}
+      (map->Context)))
 
 (defn set-ns
   "Resets the namespace for the given context"

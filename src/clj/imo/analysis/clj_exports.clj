@@ -16,3 +16,8 @@
             (->> (ns-publics ns-sym)
                  (keys)
                  (set)))))
+
+(def default-ns-imports
+  (->> (ns-imports 'clojure.core)
+       (map (juxt first #(symbol (.getName ^Class (second %)))))
+       (into {})))
