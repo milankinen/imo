@@ -1,6 +1,6 @@
 # IMO
 
-[![Build status](https://img.shields.io/travis/milankinen/imo?style=for-the-badge)](https://travis-ci.org/milankinen/imo/builds)
+[![Build status](https://img.shields.io/github/workflow/status/milankinen/imo/Build/master?style=for-the-badge)](https://github.com/milankinen/imo/actions/workflows/build.yml)
 [![Clojars](https://img.shields.io/clojars/v/imo?style=for-the-badge)](https://clojars.org/imo)
 
 `WIP...`

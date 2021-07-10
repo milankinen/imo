@@ -1,0 +1,31 @@
+name: Build
+on: push
+jobs:
+  check-dependencies:
+    name: Check dependency versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "11"
+      - uses: DeLaGuardo/setup-clojure@master
+        with:
+          lein: 2.9.6
+      - uses: actions/checkout@v2
+      - run: lein ancient
+  run-tests:
+    name: Run test suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v1
+        with:
+          java-version: "11"
+      - uses: DeLaGuardo/setup-clojure@master
+        with:
+          lein: 2.9.6
+      - uses: actions/checkout@v2
+      - run: |
+          lein t
+          lein native-image
+          # Smoke test for native image
+          echo "(ns foo.bar)" | target/native/imo-linux-amd64 -
