@@ -30,8 +30,6 @@
    :var-quote
    :vector])
 
-(def ^:private LINE-BREAK :line-break)
-
 (defrecord Layout
   [^ISeq content
    ^ISeq aligns

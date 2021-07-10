@@ -131,7 +131,7 @@
   [symbol-resolution ns-exports]
   {:pre [(map? symbol-resolution)
          (map? ns-exports)]}
-  (let [bindings (->> clj-exports/clojure-core-exports
+  (let [bindings (->> (get clj-exports/exports-map 'clojure.core)
                       (map #(create-binding % (symbol "clojure.core" (name %))))
                       (indexed-bindings))]
     (-> {:current-ns     "user"
@@ -155,13 +155,10 @@
              :scope (->Scope nil (indexed-bindings bindings))
              :aliases (into {} (map (fn [a] [(name (:local-name a)) a]) aliases))))
 
-(def ^:private built-in-exports
-  {'clojure.core clj-exports/clojure-core-exports})
-
 (defn get-ns-exports
-  "Returns list of fully qualified exports for the given
+  "Returns a set of fully qualified exports for the given
    namespace or `nil` if exports are not known"
   [ctx ns-name]
   {:pre [(simple-symbol? ns-name)]}
-  (or (get built-in-exports ns-name)
+  (or (get clj-exports/exports-map ns-name)
       (get (:ns-exports ctx) ns-name)))
