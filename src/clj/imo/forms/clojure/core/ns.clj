@@ -62,6 +62,12 @@
 (a/defspec ::import
   [":import" (a/* ::imports)])
 
+;; :gen-class
+(a/defspec ::gen-class
+  [":gen-class" (a/* [(a/named ::a/keyword "gen-class option name")
+                      (a/named ::a/any "gen-class option value")])])
+
+
 ;; ns
 (a/defspec ::doc-str (a/named (a/? ::a/string) "doc string"))
 (a/defspec ::attrs-map (a/named (a/? ::a/map) "attrs map"))
@@ -72,7 +78,8 @@
     (a/list-node
       (a/alt ::refer-clojure
              ::require
-             ::import))
+             ::import
+             ::gen-class))
     "ns clause"))
 
 (a/defspec ::ns [::a/symbol ::ns-name ::doc-str ::attrs-map (a/* ::ns-clause)])
