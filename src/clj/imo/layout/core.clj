@@ -1,7 +1,8 @@
 (ns imo.layout.core
-  (:require [imo.util :refer [node? spaces]])
+  (:require [imo.util :refer [spaces]])
   (:import (clojure.lang ISeq)))
 
+#_:clj-kondo/ignore
 (def ^:private node-types
   [:anon-fn
    :boolean

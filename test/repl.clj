@@ -1,11 +1,10 @@
 (ns repl
   (:require [imo.main :refer [-main *exit-jvm*]]
-            [imo.logger :refer [timed] :as logger]
+            [imo.logger :as logger]
             [test-utils :refer [load-test-file analyze*]]
             [imo.util :refer [node?]]
             [clojure.walk :refer [postwalk]]
-            [clojure.pprint :as pp]
-            [imo.config :as config]))
+            [clojure.pprint :as pp]))
 
 (alter-var-root #'logger/*log-level* (constantly 5))
 

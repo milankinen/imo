@@ -1,5 +1,5 @@
 (ns imo.formatting
-  (:require [imo.util :refer [node? spaces node->source]]
+  (:require [imo.util :refer [node? node->source]]
             [clojure.string :as string]))
 
 (def ^:private non-groupable-top-level-forms

@@ -94,8 +94,8 @@
 
 (definterface Spec
   (expectations [])
-  (accept [node])
-  (advance [state consume-all?]))
+  (accept [_node])
+  (advance [_state _consume-all?]))
 
 (defn- init-state [ctx node]
   (let [[node-type & children] node]

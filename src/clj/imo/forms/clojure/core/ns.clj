@@ -2,7 +2,6 @@
   (:require [imo.analysis.core :as a]
             [imo.analysis.context :as ctx]
             [imo.logger :refer [warn]]
-            [imo.config :as config]
             [clojure.string :as string]))
 
 ;; :refer-clojure

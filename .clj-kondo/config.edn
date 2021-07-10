@@ -1,0 +1,3 @@
+{:skip-comments true
+ :output        {:exclude-files ["test/__files__/*"]}
+ :linters {:refer-all {:exclude [clojure.test]}}}

@@ -21,7 +21,8 @@
                  (filter #(.matches matcher (Path/of (.toURI ^File %))))))
           (->> (filter #(.isDirectory ^File %) file-list)
                (filter #(or wilcard-dirs? (.matches matcher (Path/of (.toURI ^File %)))))
-               (mapcat #(walk % wilcard-dirs? globs))))))))
+               (mapcat #(walk % wilcard-dirs? globs))))))
+    []))
 
 (defn files
   "Returns a sequence of files matching the given glob"

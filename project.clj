@@ -19,14 +19,15 @@
                        :repl-options {:init-ns repl}
                        :global-vars  {*warn-on-reflection* true}}
              :test    {:dependencies [[eftest "0.5.9"]]}
+             :linter  {:dependencies ^:replace [[clj-kondo "2021.06.18"]]
+                       :global-vars  {*warn-on-reflection* false}}
              :clitest {:global-vars {*warn-on-reflection* false}}
              :uberjar {:global-vars   {*assert* false}
                        :clean-targets ["target/uberjar" "target/native"]
                        :jvm-opts      [~(str "-Dimo.version=" :project/version)]
                        :aot           :all}}
-  :aliases {"i"            ["do"
-                            ["with-profile" "+dev,+test" "deps"]
-                            ["with-profile" "+dev,+test" "deps" ":tree"]]
+  :aliases {"show-deps"    ["with-profile" "+dev,+test" "deps" ":tree"]
+            "lint"         ["with-profile" "linter" "run" "-m" "clj-kondo.main" "--lint" "src" "test"]
             "test"         ["with-profile" "+dev,+test,+clitest" "trampoline" "run" "-m" "test-runner/run-from-cli!"]
             "t"            "test"
             "native-image" ["do"

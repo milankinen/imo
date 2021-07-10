@@ -4,7 +4,7 @@
             [cognitect.transit :as transit]
             [imo.core :as imo]
             [imo.glob :as glob]
-            [imo.logger :refer [v vv vvv warn] :as logger]
+            [imo.logger :refer [v vv warn] :as logger]
             [imo.config :as config]
             [clojure.string :as string]
             [clojure.edn :as edn]
