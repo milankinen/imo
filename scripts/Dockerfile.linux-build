@@ -1,12 +1,15 @@
 FROM openjdk:11
 
+ARG GRAALVM_VERSION
+
 RUN apt-get update && apt-get install -y build-essential zlib1g-dev
-RUN curl -o /usr/bin/lein https://raw.githubusercontent.com/technomancy/leiningen/2.9.1/bin/lein \
+RUN curl -o /usr/bin/lein https://raw.githubusercontent.com/technomancy/leiningen/2.9.5/bin/lein \
   && chmod 755 /usr/bin/lein \
   && lein -version
 
 RUN mkdir -p /work/scripts
 COPY setup_graalvm.sh /work/scripts/setup_graalvm.sh
-RUN /work/scripts/setup_graalvm.sh 11
+RUN echo $GRAALVM_VERSION > /work/graalvm.version
+RUN /work/scripts/setup_graalvm.sh
 
 WORKDIR /work

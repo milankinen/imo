@@ -20,21 +20,17 @@
                        :global-vars  {*warn-on-reflection* true}}
              :test    {:dependencies [[eftest "0.5.9"]]}
              :clitest {:global-vars {*warn-on-reflection* false}}
-             :uberjar {:global-vars {*assert* false}
+             :uberjar {:global-vars   {*assert* false}
                        :clean-targets ["target/uberjar" "target/native"]
-                       :jvm-opts    [~(str "-Dimo.version=" :project/version)]
-                       :aot         :all}}
+                       :jvm-opts      [~(str "-Dimo.version=" :project/version)]
+                       :aot           :all}}
   :aliases {"i"            ["do"
                             ["with-profile" "+dev,+test" "deps"]
                             ["with-profile" "+dev,+test" "deps" ":tree"]]
             "test"         ["with-profile" "+dev,+test,+clitest" "trampoline" "run" "-m" "imo.test-runner/run-from-cli!"]
             "t"            "test"
             "native-image" ["do"
-                            ["shell" "./scripts/setup_graalvm.sh" ~(-> (System/getProperty "java.version")
-                                                                     (.replaceFirst "^1\\." "")
-                                                                     (.split "\\.")
-                                                                     (first))]
-                            ["uberjar"]
+                            ["shell" "./scripts/setup_graalvm.sh"]
                             ["shell" "./scripts/build_native_image.sh"]]
             "linux-image"  ["shell" "./scripts/build_linux_image_with_docker.sh"]
             "fmt"          ["with-profile" "+dev,+test" "trampoline" "run" "-m" "repl/format-project!"]})
