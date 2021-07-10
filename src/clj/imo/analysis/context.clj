@@ -136,9 +136,17 @@
               fq-name (symbol (str fq-class-name-sym suffix))]]
     (create-binding local-name fq-name)))
 
+(def default-import-aliases
+  (for [[import-sym fq-class-name-sym] clj-exports/default-ns-imports]
+    (->Alias import-sym fq-class-name-sym)))
+
 (def default-bindings
   (-> (concat default-clj-core-bindings default-import-bindings)
       (indexed-bindings)))
+
+(def default-aliases
+  (zipmap (map (comp str :local-name) default-import-aliases)
+          default-import-aliases))
 
 (defn create-context
   "Creates fresh context with the given custom symbol resolutions
@@ -148,7 +156,7 @@
          (map? ns-exports)]}
   (-> {:current-ns     "user"
        :scope          (->Scope nil default-bindings)
-       :aliases        {}
+       :aliases        default-aliases
        :sym-resolution symbol-resolution
        :mode           :eval
        :recur-target   nil}

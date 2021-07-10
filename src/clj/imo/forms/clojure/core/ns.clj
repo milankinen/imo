@@ -118,16 +118,16 @@
         (let [[libspec rem]
               (case (second opt)
                 (":only" ":refer") (let [prev-refers (:refers libspec)
-                                          refers (if (or (= ":all" (second (first xs)))
-                                                         (= :all prev-refers))
-                                                   :all
-                                                   (->> (when-not (invalid? (first xs))
-                                                          (next (first xs)))
-                                                        (remove invalid?)
-                                                        (map second)
-                                                        (concat prev-refers)))]
-                                      [(assoc libspec :refers refers)
-                                       (next xs)])
+                                         refers (if (or (= ":all" (second (first xs)))
+                                                        (= :all prev-refers))
+                                                  :all
+                                                  (->> (when-not (invalid? (first xs))
+                                                         (next (first xs)))
+                                                       (remove invalid?)
+                                                       (map second)
+                                                       (concat prev-refers)))]
+                                     [(assoc libspec :refers refers)
+                                      (next xs)])
                 ":as" (let [alias (when-not (invalid? (first xs))
                                     (second (first xs)))]
                         [(assoc libspec :alias alias)
@@ -257,22 +257,28 @@
                             :let [lib-s (:lib libspec)
                                   lib-sym (symbol lib-s)
                                   renames (:renames libspec)
+                                  _ (println (pr-str renames))
                                   refers (:refers libspec)]
                             refer (if (= :all refers)
                                     (or (ctx/get-ns-exports ctx lib-sym)
                                         (warn nil "couldn't find :all exports for " lib-sym))
                                     (map symbol refers))]
-                        (let [local (if-let [renamed-s (get renames refer)]
+                        (let [local (if-let [renamed-s (get renames (str refer))]
                                       (symbol renamed-s)
                                       refer)
-                              fq (symbol lib-s (name local))]
+                              fq (symbol lib-s (name refer))]
                           (ctx/create-binding local fq)))
-          aliases (for [libspec libspecs
-                        :when (and (not (:js? libspec))
-                                   (:alias libspec))
-                        :let [lib-s (:lib libspec)
-                              alias (:alias libspec)]]
-                    (ctx/create-alias (symbol alias) (symbol lib-s)))
+          aliases-from-libspecs (for [libspec libspecs
+                                      :when (and (not (:js? libspec))
+                                                 (:alias libspec))
+                                      :let [lib-s (:lib libspec)
+                                            alias (:alias libspec)]]
+                                  (ctx/create-alias (symbol alias) (symbol lib-s)))
+          aliases-from-user-imports (->> user-imports
+                                         (remove #(string/ends-with? (str (:local-name %)) "."))
+                                         (map (fn [{:keys [local-name fq-name]}]
+                                                (ctx/create-alias local-name fq-name))))
+          aliases (concat ctx/default-import-aliases aliases-from-user-imports aliases-from-libspecs)
           bindings (concat ctx/default-import-bindings clj-refers user-refers user-imports)]
       (ctx/set-ns ctx ns-name aliases bindings))
     ctx))
