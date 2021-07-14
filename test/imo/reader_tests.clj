@@ -12,8 +12,9 @@
            (inspect ast opts)
            ast))))
 
-(def ^:private line-col {:drop-keys [:imo/node]})
-(def ^:private no-line-col {:drop-keys [:imo/node :line :col]})
+(def ^:private line-col {:drop-keys [:imo/node :comments]})
+(def ^:private no-line-col {:drop-keys [:imo/node :line :col :comments]})
+(def ^:private comments-only {:drop-keys [:imo/node :line :col]})
 (def ^:private no-meta {:meta? false})
 
 (deftest leaf-nodes-reading
@@ -244,3 +245,42 @@
               "bal"]]
            (read "|foo ^Lol
                   | bal" no-line-col)))))
+
+(deftest comments-reading
+  (testing "comments are counted and summed inside node"
+    (is (= '[:$ {:comments 3}
+             [:list {:comments 3
+                     :pre      ([:comment {:comments 1} "; declare foo function\n"])}
+              [:symbol {:comments 0} "defn"]
+              [:symbol {:comments 0
+                        :pre      ([:space {:comments 0} " "])}
+               "foo"]
+              [:vector {:comments 1
+                        :post     ([:newline {:comments 0} "\n"])
+                        :pre      ([:space {:comments 0} " "])}
+               [:symbol {:comments 1
+                         :post     ([:space {:comments 0} " "]
+                                    [:comment {:comments 1} "; first arg\n"])}
+                "bar"]
+               [:symbol {:comments 0
+                         :pre      ([:space {:comments 0} "           "])}
+                "baz"]]
+              [:list {:comments 1
+                      :pre      ([:space {:comments 0} "  "]
+                                 [:comment {:comments 1} "; subtract bar from baz\n"]
+                                 [:space {:comments 0} "  "])}
+               [:symbol {:comments 0}
+                "-"]
+               [:symbol {:comments 0
+                         :pre      ([:space {:comments 0}
+                                     " "])}
+                "baz"]
+               [:symbol {:comments 0
+                         :pre      ([:space {:comments 0} " "])}
+                "bar"]]]]
+           (read "|; declare foo function
+                  |(defn foo [bar ; first arg
+                  |           baz]
+                  |  ; subtract bar from baz
+                  |  (- baz bar))"
+                 comments-only)))))

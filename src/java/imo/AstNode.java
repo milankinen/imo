@@ -191,10 +191,13 @@ public final class AstNode {
 
   public PersistentVector toVec() {
     ITransientCollection vec = PersistentVector.EMPTY.asTransient();
+    int comments = type == COMMENT ? 1 : 0;
     vec = vec.conj(type);
     for (Object child : children) {
       if (child instanceof AstNode) {
-        vec = vec.conj(((AstNode) child).toVec());
+        PersistentVector childVec = ((AstNode) child).toVec();
+        comments += (Integer) childVec.meta().valAt(COMMENTS);
+        vec = vec.conj(childVec);
       } else {
         vec = vec.conj(child);
       }
@@ -203,7 +206,8 @@ public final class AstNode {
         .asTransient()
         .assoc(NODE, true)
         .assoc(LINE, line)
-        .assoc(COL, col);
+        .assoc(COL, col)
+        .assoc(COMMENTS, comments);
     meta = assocNodes(meta, PRE, pre);
     meta = assocNodes(meta, HIDDEN, hidden);
     meta = assocNodes(meta, POST, post);
@@ -233,8 +237,14 @@ public final class AstNode {
   private static ITransientMap assocNodes(ITransientMap meta, Keyword key, List<AstNode> nodes) {
     if (nodes != null && !nodes.isEmpty()) {
       ITransientCollection res = PersistentVector.EMPTY.asTransient();
+      int comments = 0;
       for (AstNode node : nodes) {
-        res = res.conj(node.toVec());
+        PersistentVector vec = node.toVec();
+        comments += (Integer) vec.meta().valAt(COMMENTS);
+        res = res.conj(vec);
+      }
+      if (comments > 0) {
+        meta = meta.assoc(COMMENTS, comments + (Integer) meta.valAt(COMMENTS));
       }
       return meta.assoc(key, res.persistent().seq());
     } else {
