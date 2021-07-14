@@ -22,8 +22,15 @@
       (if (some? node)
         (case (first node)
           (:space :newline :comment) (recur ctx xs (conj! result node))
-          (:meta :discard) (let [[ctx' node'] (analyze-node-with default-node-analyzer ctx node)]
-                             (recur ctx' xs (conj! result node'))))
+          :discard (let [[ctx' node'] (analyze-node-with default-node-analyzer ctx node)
+                         discarded (second node)
+                         ctx' (if (and (= :keyword (first discarded))
+                                       (= ":imo/ignore" (second discarded)))
+                                (assoc ctx' :ignore-next true)
+                                ctx')]
+                     (recur ctx' xs (conj! result node')))
+          :meta (let [[ctx' node'] (analyze-node-with default-node-analyzer ctx node)]
+                  (recur ctx' xs (conj! result node'))))
         [ctx (seq (persistent! result))]))))
 
 (defn- generic-node-analyzer [ctx node]
@@ -59,6 +66,13 @@
             state+meta+node))
         (try
           (let [[ctx m] state+meta+node
+                ignore-next? (:ignore-next ctx)
+                ctx (if ignore-next?
+                      (assoc ctx :ignore-next false)
+                      ctx)
+                m (if ignore-next?
+                    (assoc! m :ignore? true)
+                    m)
                 [ctx' node'] (analyzer ctx node)
                 _ (assert (ctx? ctx') (str "invalid result context while analyzing ast node: " (node->source node)))
                 _ (assert (vector? node') (str "invalid result node while analyzing ast node: " (node->source node)))
@@ -70,8 +84,15 @@
             (when (= :eval (:mode ctx))
               (warn (ex-position ex node) (ex-message ex)))
             (let [[ctx m] state+meta+node
+                  ignore-next? (:ignore-next ctx)
+                  ctx (if ignore-next?
+                        (assoc ctx :ignore-next false)
+                        ctx)
+                  m (if ignore-next?
+                      (assoc! m :ignore? true)
+                      m)
                   [ctx' node'] (generic-node-analyzer ctx node)
-                  m' (assoc! m :formatting :whitespace :invalid? true)]
+                  m' (assoc! m :invalid? true)]
               [ctx' m' node'])))
         (let [[ctx m node] state+meta+node]
           (if-let [[ctx' nodes] (analyze-meta-nodes ctx (:hidden m))]

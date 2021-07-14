@@ -20,7 +20,8 @@
    ^Map ns-exports
    ^String current-ns
    ^Keyword mode
-   ^Binding recur-target])
+   ^Binding recur-target
+   ^Boolean ignore-next])
 
 (defn ctx?
   "Returns boolean whether the given value is context or not"
@@ -159,7 +160,8 @@
        :aliases        default-aliases
        :sym-resolution symbol-resolution
        :mode           :eval
-       :recur-target   nil}
+       :recur-target   nil
+       :ignore-next    false}
       (map->Context)))
 
 (defn set-ns
