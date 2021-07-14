@@ -284,3 +284,38 @@
                   |  ; subtract bar from baz
                   |  (- baz bar))"
                  comments-only)))))
+
+(deftest discard+meta-reading
+  (testing "discarding is applied to the node after meta nodes"
+    (is (= '[:$ {:post ([:discard {}
+                         [:number {:pre ([:meta {}
+                                          [:keyword {} ":foo"]]
+                                         [:space {} " "]
+                                         [:meta {}
+                                          [:keyword {} ":bar"]]
+                                         [:space {} " "])}
+                          "123"]])}]
+           (read "#_^:foo ^:bar 123" no-line-col)))))
+
+(deftest meta+discard-reading
+  (testing "discarding is applied to the node after meta nodes"
+    (is (= '[:$ {}
+             [:number {:pre ([:meta {}
+                              [:keyword {} ":foo"]]
+                             [:space {} " "]
+                             [:discard {}
+                              [:number {} "1"]]
+                             [:space {} " "])}
+              "2"]]
+           (read "^:foo #_1 2" no-line-col)))))
+
+(deftest nested-discard-reading
+  (testing "discards can be nested"
+    (is (= '[:$ {}
+             [:number {:pre ([:discard {}
+                              [:number {:pre ([:discard {} [:number {} "1"]]
+                                              [:space {} " "])}
+                               "2"]]
+                             [:space {} " "])}
+              "3"]]
+           (read "#_#_1 2 3" no-line-col)))))
