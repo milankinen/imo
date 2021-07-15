@@ -69,4 +69,3 @@
                                [:space {} "    "])}
                 "3"]]
              (inspect nodes {:drop-keys [:imo/node :line :col :comments]}))))))
-

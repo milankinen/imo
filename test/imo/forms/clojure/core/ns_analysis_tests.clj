@@ -160,8 +160,3 @@
                              :name Test
                              :implements [java.lang.AutoCloseable])))]
       (is (not (invalid? ast))))))
-
-
-
-
-
