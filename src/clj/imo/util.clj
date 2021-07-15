@@ -1,6 +1,56 @@
 (ns imo.util
-  (:require [clojure.string :as string])
+  (:require [clojure.string :as string]
+            [clojure.set :as set])
   (:import (imo AstNode Util)))
+
+(def whitespace-node-types
+  #{:space
+    :newline
+    :comment})
+
+(def reader-node-types
+  #{:reader-cond
+    :reader-cond-splice})
+
+(def evaluable-node-types
+  #{:anon-fn
+    :boolean
+    :char
+    :deref
+    :discard
+    :keyword
+    :list
+    :map
+    :meta
+    :nil
+    :ns-map
+    :number
+    :quote
+    :regex
+    :set
+    :string
+    :symbol
+    :symbolic-val
+    :syntax-quote
+    :tagged-literal
+    :unquote
+    :unquote-splice
+    :var-quote
+    :vector})
+
+(def terminal-node-types
+  #{:boolean
+    :char
+    :keyword
+    :nil
+    :number
+    :regex
+    :string
+    :symbol
+    :symbolic-val})
+
+(def conjuction-node-types
+  (set/difference evaluable-node-types terminal-node-types))
 
 (defn split-lines
   "Like string/split-lines but handles also special case where
@@ -67,3 +117,13 @@
                     (take-while (comp not #{\n}))
                     (count)))]
     {:line line :col col}))
+
+(defn- invalid* [node]
+  (if (contains? terminal-node-types (first node))
+    (:invalid? (meta node))
+    (or (:invalid? (meta node))
+        (some invalid* (next node)))))
+
+(defn invalid? [node]
+  {:pre [(node? node)]}
+  (boolean (invalid* node)))

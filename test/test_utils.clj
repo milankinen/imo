@@ -4,7 +4,8 @@
             [clojure.walk :refer [postwalk]]
             [imo.util :refer [node?]]
             [imo.core :as imo]
-            [imo.config :as config]))
+            [imo.config :as config]
+            [imo.layout.core :as l]))
 
 (defn load-test-file
   "Loads the contents of the given test file and returns
@@ -58,3 +59,6 @@
        (into [(first %) (apply dissoc (cons (inspect (meta %) opts) drop-keys))] (next %))
        %)
     ast))
+
+(defn empty-test-layout []
+  (l/empty-layout (l/->Context 80)))
