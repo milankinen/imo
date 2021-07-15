@@ -1,6 +1,7 @@
 (ns imo.formatting
-  (:require [imo.util :refer [node? node->source]]
-            [clojure.string :as string]))
+  (:require [imo.util :refer [node?]]
+            [clojure.string :as string]
+            [imo.layout.core :as l]))
 
 (def ^:private non-groupable-top-level-forms
   '#{clojure.core/defn
@@ -21,8 +22,14 @@
 (defn- make-newlines [num-newlines]
   (string/join "" (repeat num-newlines "\n")))
 
-(defn- format-top-level-form [form]
-  (node->source form))
+(defn- format-top-level-form [ctx form]
+  (let [layout (-> (l/empty-layout ctx)
+                   (l/add-node form))]
+    (assert (some? layout) "Top level form must always return layout")
+    (l/layout->source layout)))
+
+(defn- non-whitespace-meta-form? [[node-type]]
+  (contains? #{:discard :meta} node-type))
 
 (defn format-root
   "Formats the given root ast node trying to fit the output
@@ -35,7 +42,8 @@
         nodes (volatile! (concat pre forms hidden post))
         last-appended-node (volatile! nil)
         newlines (volatile! 0)
-        result (StringBuilder.)]
+        result (StringBuilder.)
+        ctx (l/map->Context {:target-width width})]
     (while (seq @nodes)
       (let [node (first @nodes)]
         (case (first node)
@@ -72,7 +80,7 @@
             (vswap! nodes next))
           :form
           (let [[_ form] node
-                formatted (format-top-level-form form)]
+                formatted (format-top-level-form ctx form)]
             (case (first @last-appended-node)
               ;; Nothing formatted yet, just append this form to the
               ;; beginning of the file
@@ -87,10 +95,11 @@
               ;; with the last formatted form, we can use only one newline between
               ;; forms, othewise we must add single blank line between them
               :form
-              (let [group? (and (groupable? (second @last-appended-node))
-                                (groupable? form)
-                                (not (string/includes? formatted "\n"))
-                                (not (string/includes? (nth @last-appended-node 2) "\n")))
+              (let [group? (or (and (groupable? (second @last-appended-node))
+                                    (groupable? form)
+                                    (not (string/includes? formatted "\n"))
+                                    (not (string/includes? (nth @last-appended-node 2) "\n")))
+                               (non-whitespace-meta-form? (second @last-appended-node)))
                     min-newlines (if group? 1 2)]
                 (.append result (make-newlines (max min-newlines @newlines)))
                 (.append result formatted)))
