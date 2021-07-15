@@ -47,29 +47,28 @@
             (vswap! newlines #(min 3 (inc %)))
             (vswap! nodes next))
           :comment
-          (let [comment (string/replace (second node) #"\n$" "")]
-            (case (first @last-appended-node)
-              ;; Nothing formatted yet, just append this comment
-              nil (do (.append result comment)
-                      (vreset! last-appended-node node))
-              ;; Last formatted node was comment: add this comment to the
-              ;; one of the next lines, depending on how many newlines
-              ;; the user has added between comments
-              :comment
-              (do (.append result (make-newlines (max 1 @newlines)))
-                  (.append result comment)
-                  (vreset! last-appended-node node))
-              ;; Last formatted node was form: if user has added newlines between
-              ;; form and comment, then respect that decision. If not, add two
-              ;; spaces between form and comment
-              :form
-              (do (.append result (if (pos? @newlines)
-                                    (make-newlines (max 2 @newlines))
-                                    "  "))
-                  (.append result comment)
-                  (when (pos? @newlines)
-                    (vreset! last-appended-node node))))
-            (vreset! newlines 1)
+          (do (case (first @last-appended-node)
+                ;; Nothing formatted yet, just append this comment
+                nil (do (.append result (second node))
+                        (vreset! last-appended-node node))
+                ;; Last formatted node was comment: add this comment to the
+                ;; one of the next lines, depending on how many newlines
+                ;; the user has added between comments
+                :comment
+                (do (.append result (make-newlines @newlines))
+                    (.append result (second node))
+                    (vreset! last-appended-node node))
+                ;; Last formatted node was form: if user has added newlines between
+                ;; form and comment, then respect that decision. If not, add two
+                ;; spaces between form and comment
+                :form
+                (do (.append result (if (pos? @newlines)
+                                      (make-newlines (max 2 @newlines))
+                                      "  "))
+                    (.append result (second node))
+                    (when (pos? @newlines)
+                      (vreset! last-appended-node node))))
+            (vreset! newlines 0)
             (vswap! nodes next))
           :form
           (let [[_ form] node

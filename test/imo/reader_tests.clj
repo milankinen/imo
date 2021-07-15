@@ -47,7 +47,8 @@
 (deftest whitespace-reading
   (testing "all whitespaces, comments and discards prior to node are marked as :pre"
     (is (= '[:$ {}
-             [:symbol {:pre ([:comment {} "; this is a comment\n"]
+             [:symbol {:pre ([:comment {} "; this is a comment"]
+                             [:newline {} "\n"]
                              [:space {} "  "]
                              [:discard {}
                               [:symbol {:pre ([:space {} "  "])} "foobar"]]
@@ -78,7 +79,8 @@
   (testing "discards are treated like any other whitespace"
     (is (= '[:$ {}
              [:symbol {:pre ([:space {} " "]
-                             [:comment {} "; test\n"]
+                             [:comment {} "; test"]
+                             [:newline {} "\n"]
                              [:discard {} [:symbol {} "foo"]]
                              [:newline {} "\n"])}
               "bar"]]
@@ -104,7 +106,10 @@
                                " "]
                               [:comment {:col  2
                                          :line 1}
-                               "; test\n"]
+                               "; test"]
+                              [:newline {:col  8
+                                         :line 1}
+                               "\n"]
                               [:discard {:col  1
                                          :line 2}
                                [:symbol {:col  3
@@ -250,7 +255,8 @@
   (testing "comments are counted and summed inside node"
     (is (= '[:$ {:comments 3}
              [:list {:comments 3
-                     :pre      ([:comment {:comments 1} "; declare foo function\n"])}
+                     :pre      ([:comment {:comments 1} "; declare foo function"]
+                                [:newline {:comments 0} "\n"])}
               [:symbol {:comments 0} "defn"]
               [:symbol {:comments 0
                         :pre      ([:space {:comments 0} " "])}
@@ -260,14 +266,16 @@
                         :pre      ([:space {:comments 0} " "])}
                [:symbol {:comments 1
                          :post     ([:space {:comments 0} " "]
-                                    [:comment {:comments 1} "; first arg\n"])}
+                                    [:comment {:comments 1} "; first arg"]
+                                    [:newline {:comments 0} "\n"])}
                 "bar"]
                [:symbol {:comments 0
                          :pre      ([:space {:comments 0} "           "])}
                 "baz"]]
               [:list {:comments 1
                       :pre      ([:space {:comments 0} "  "]
-                                 [:comment {:comments 1} "; subtract bar from baz\n"]
+                                 [:comment {:comments 1} "; subtract bar from baz"]
+                                 [:newline {:comments 0} "\n"]
                                  [:space {:comments 0} "  "])}
                [:symbol {:comments 0}
                 "-"]

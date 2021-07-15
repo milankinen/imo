@@ -400,11 +400,14 @@ public class SourceReader {
       if (ch == -1 || isNewline(ch)) {
         if (ch == -1) {
           unread1();
+          handleLineBreak(createComment(line, col, readMarked()));
         } else {
           _line++;
           _col = 1;
+          String comment = readMarkedExceptLast();
+          handleMetaNode(createComment(line, col, comment));
+          handleLineBreak(createNewline(line, col + comment.length()));
         }
-        handleLineBreak(createComment(line, col, readMarked()));
         break;
       } else {
         _col++;
@@ -772,6 +775,10 @@ public class SourceReader {
 
   private String readMarked() {
     return _source.substring(_mark, _index);
+  }
+
+  private String readMarkedExceptLast() {
+    return _source.substring(_mark, _index - 1);
   }
 
   private boolean isEOF() {
