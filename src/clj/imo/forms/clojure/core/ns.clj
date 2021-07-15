@@ -256,7 +256,6 @@
                             :let [lib-s (:lib libspec)
                                   lib-sym (symbol lib-s)
                                   renames (:renames libspec)
-                                  _ (println (pr-str renames))
                                   refers (:refers libspec)]
                             refer (if (= :all refers)
                                     (or (ctx/get-ns-exports ctx lib-sym)
