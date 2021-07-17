@@ -42,6 +42,7 @@ public class SourceReader {
   private int _col = 1;
   private int _mark = -1;
   private LinkedList<AstNode> pendingMetaNodes = null;
+  private boolean hasPendingMetadataMetaNodes = false;
   private AstNode latestReadNode = null;
 
   private SourceReader(String source, int tabSize) {
@@ -52,7 +53,7 @@ public class SourceReader {
     macros[';'] = this::readCommentNode;
     macros['\''] = this::readQuoteNode;
     macros['@'] = this::readDerefNode;
-    macros['^'] = this::readMetaNode;
+    macros['^'] = this::readMetadataNode;
     macros['`'] = this::readSyntaxQuoteNode;
     macros['~'] = this::readUnquoteNode;
     macros['('] = this::readListNode;
@@ -64,7 +65,7 @@ public class SourceReader {
     macros['\\'] = this::readCharNode;
     macros['%'] = this::readArgNode;
     macros['#'] = this::readDispatchNode;
-    dispatchMacros['^'] = this::readMetaNode;
+    dispatchMacros['^'] = this::readMetadataNode;
     dispatchMacros['#'] = this::readSymbolicValueNode;
     dispatchMacros['\''] = this::readVarQuoteNode;
     dispatchMacros['"'] = this::readRegexNode;
@@ -88,6 +89,9 @@ public class SourceReader {
       forms.add(form);
     }
     AstNode root = createRoot(forms);
+    if (hasPendingMetadataMetaNodes) {
+      throw new ReaderException("EOF while reading");
+    }
     root.post = pendingMetaNodes;
     return root;
   }
@@ -121,7 +125,7 @@ public class SourceReader {
       }
 
       if (!pendingEndChars.empty() && pendingEndChars.peek().equals(ch)) {
-        return endOfColl(line, col);
+        return endOfColl(line, col, ch);
       }
 
       FormReader macroReader = getMacro(ch);
@@ -425,7 +429,7 @@ public class SourceReader {
     return readNextForm();
   }
 
-  private AstNode readMetaNode(int line, int col) {
+  private AstNode readMetadataNode(int line, int col) {
     // Special case:
     //   foo ^Meta <newline>
     //   bar
@@ -443,6 +447,7 @@ public class SourceReader {
       throw new ReaderException("Metadata must be Symbol, Keyword, String or Map");
     }
     handleMetaNode(createMeta(line, col, form));
+    hasPendingMetadataMetaNodes = true;
     return readNextForm();
   }
 
@@ -704,7 +709,15 @@ public class SourceReader {
    * Helpers
    */
 
-  private AstNode endOfColl(int line, int col) {
+  private AstNode endOfColl(int line, int col, int endChar) {
+    if (hasPendingMetadataMetaNodes) {
+      // If there are any pending metadata nodes we must throw an exception because
+      // metadata nodes must **always** be assigned to :pre position. An example
+      // where this exception might occur:
+      // (foo ^:bar
+      //    )
+      throw new ReaderException("Unmatching paren '" + ((char) endChar) + "'");
+    }
     return handleNode(new AstNode(line, col, END_OF_COLL, List.of()));
   }
 
@@ -808,6 +821,7 @@ public class SourceReader {
       latestReadNode.post = pendingMetaNodes;
       pendingMetaNodes = null;
       latestReadNode = null;
+      hasPendingMetadataMetaNodes = false;
     }
   }
 
@@ -822,6 +836,7 @@ public class SourceReader {
     assert node.pre == null;
     node.pre = pendingMetaNodes;
     pendingMetaNodes = null;
+    hasPendingMetadataMetaNodes = false;
     latestReadNode = node;
     return node;
   }

@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [read])
   (:require [clojure.test :refer :all]
             [test-utils :refer [src inspect]]
-            [imo.core :as imo]))
+            [imo.core :as imo])
+  (:import (imo ImoException)))
 
 (defn- read
   ([s] (read s {}))
@@ -327,3 +328,11 @@
                              [:space {} " "])}
               "3"]]
            (read "#_#_1 2 3" no-line-col)))))
+
+(deftest danling-metadata-nodes-reading
+  (testing "dangling metadata nodes before end of collection should throw an exception"
+    (is (thrown? ImoException "Unmatching paren ')'"
+                 (read "(foo ^:bar \n)"))))
+  (testing "dangling metadata nodes before end of file should throw an exception"
+    (is (thrown? ImoException "EOF while reading")
+        (read "foo ^:bar"))))
