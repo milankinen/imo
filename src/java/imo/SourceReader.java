@@ -622,20 +622,20 @@ public class SourceReader {
           // lift them to latest form's post position and if that is not possible
           // we must use collection node's hidden content
           AstNode collNode = ctor.create(line, col, items);
-          assert collNode.hidden == null;
+          assert collNode.metaChildren == null;
           if (!items.isEmpty()) {
             // e.g. (foo )
             AstNode lastItem = items.getLast();
             if (item.pre != null) {
               if (lastItem.post != null) {
-                collNode.hidden = item.pre;
+                collNode.metaChildren = item.pre;
               } else {
                 lastItem.post = item.pre;
               }
             }
           } else {
             // e.g. [ ]
-            collNode.hidden = item.pre;
+            collNode.metaChildren = item.pre;
           }
           return collNode;
         } else {

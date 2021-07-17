@@ -169,18 +169,18 @@
     ; Trailing whitespace
     (is (= '[:vector {} [:symbol {:post ([:space {} "   "])} "foo"]]
            (last (read "[foo   ]" no-line-col)))))
-  (testing "floating whitespace (after last item's newline) is marked as :hidden"
-    (is (= '[:vector {:hidden ([:space {} "  "])}
+  (testing "floating whitespace (after last item's newline) is marked as :children"
+    (is (= '[:vector {:children ([:space {} "  "])}
              [:symbol {:post ([:space {} " "]
                               [:newline {} "\n"])}
               "foo"]]
            (last (read "[foo \n  ]" no-line-col)))))
-  (testing "empty collection whitespace is marked as :hidden"
-    (is (= '[:vector {:hidden ([:space {} "   "])}]
+  (testing "empty collection whitespace is marked as :children"
+    (is (= '[:vector {:children ([:space {} "   "])}]
            (last (read "[   ]" no-line-col))))
-    (is (= '[:vector {:hidden ([:space {} " "]
-                               [:newline {} "\n"]
-                               [:space {} " "])}]
+    (is (= '[:vector {:children ([:space {} " "]
+                                 [:newline {} "\n"]
+                                 [:space {} " "])}]
            (last (read "[ \n ]" no-line-col))))))
 
 (deftest macros-reading

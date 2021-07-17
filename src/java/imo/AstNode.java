@@ -180,7 +180,7 @@ public final class AstNode {
 
   public List<AstNode> pre;
   public List<AstNode> post;
-  public List<AstNode> hidden;
+  public List<AstNode> metaChildren;
 
   public AstNode(int line, int col, Keyword type, List<?> children) {
     this.line = line;
@@ -209,7 +209,7 @@ public final class AstNode {
         .assoc(COL, col)
         .assoc(COMMENTS, comments);
     meta = assocNodes(meta, PRE, pre);
-    meta = assocNodes(meta, HIDDEN, hidden);
+    meta = assocNodes(meta, CHILDREN, metaChildren);
     meta = assocNodes(meta, POST, post);
     return ((PersistentVector) vec.persistent()).withMeta(meta.persistent());
   }
@@ -226,7 +226,7 @@ public final class AstNode {
     for (Object child : children) {
       sb.append(child.toString());
     }
-    appendNodeStrings(sb, hidden);
+    appendNodeStrings(sb, metaChildren);
     if (endChars != null) {
       sb.append(endChars);
     }

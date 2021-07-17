@@ -95,8 +95,8 @@
                   m' (assoc! m :invalid? true)]
               [ctx' m' node'])))
         (let [[ctx m node] state+meta+node]
-          (if-let [[ctx' nodes] (analyze-meta-nodes ctx (:hidden m))]
-            [ctx' (assoc! m :hidden nodes) node]
+          (if-let [[ctx' nodes] (analyze-meta-nodes ctx (:children m))]
+            [ctx' (assoc! m :children nodes) node]
             state+meta+node))
         (let [[ctx m node] state+meta+node]
           (if-let [[ctx' nodes] (analyze-meta-nodes ctx (:post m))]

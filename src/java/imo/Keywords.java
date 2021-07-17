@@ -39,7 +39,7 @@ public interface Keywords {
   Keyword NODE = Keyword.intern("imo/node");
   Keyword LINE = Keyword.intern("line");
   Keyword COL = Keyword.intern("col");
-  Keyword HIDDEN = Keyword.intern("hidden");
+  Keyword CHILDREN = Keyword.intern("children");
   Keyword COMMENTS = Keyword.intern("comments");
   Keyword PRE = Keyword.intern("pre");
   Keyword POST = Keyword.intern("post");
