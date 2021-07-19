@@ -1,12 +1,12 @@
 (ns repl
   (:require [imo.main :refer [-main *exit-jvm*]]
             [imo.logger :as logger]
-            [test-utils :refer [load-test-file analyze*]]
+            [test-utils :as utils]
             [imo.util :refer [node?]]
-            [clojure.walk :refer [postwalk]]
-            [clojure.pprint :as pp]))
+            [imo.config :as config]
+            [imo.core :as imo]))
 
-(alter-var-root #'logger/*log-level* (constantly 5))
+(logger/set-log-level! 5)
 
 (defn format-project!
   "Formats the entire project files"
@@ -16,39 +16,53 @@
            "src/**/*.clj"
            "!test/__files__/*")))
 
-(def ^:dynamic *print-all*
-  "Set to `true` to print **all** ast data with `pr-ast`"
-  false)
+(defn analyze [source]
+  (utils/analyze source))
+
+(defn analyze* [& forms]
+  (apply utils/analyze* forms))
+
+(def noise-keys
+  [:imo/node
+   :pre*
+   :post*
+   :children*
+   :line
+   :col
+   :inner-lines
+   :outer-lines
+   :inner-length
+   :outer-length])
 
 (defn explain
   "Explains the analyzed ast node"
-  [node]
-  {:pre [(node? node)]}
-  (letfn [(walk [value]
-            (postwalk (fn [x]
-                        (if (node? x)
-                          (let [m (meta x)
-                                m (if-not *print-all*
-                                    (dissoc m :imo/node :pre :post :line :col)
-                                    m)
-                                m (walk m)]
-                            (if (seq m)
-                              (into [(first x) m] (rest x))
-                              (into [(first x)] (rest x))))
-                          x))
-                      value))]
-    (walk node)))
+  ([node] (explain node false))
+  ([node all?]
+   {:pre [(node? node)]}
+   (utils/inspect node {:drop-keys (if all? [] noise-keys)})))
 
 (defn explain*
   "Explains the the given form after the form has been analyzed"
   [& body]
-  (explain (apply analyze* body)))
+  (explain (apply utils/analyze* body) false))
 
-(defn pr-ast
-  "Prints explained data (and metadata) from the given ast node"
-  [ast]
-  {:pre [(node? ast)]}
-  (pp/pprint (explain ast)))
+(defn explain-all*
+  "Explains the the given form after the form has been analyzed"
+  [& body]
+  (explain (apply utils/analyze* body) true))
+
+(defn fmt [node]
+  {:pre [(node? node)]}
+  (let [root (if (not= :$ (first node))
+               ^{:imo/node true} [:$ node]
+               node)]
+    (print "**** formatted ****" (str "\n" (imo/format config/defaults root)))))
+
+(defn fmt* [& body]
+  (->> (apply utils/analyze* body)
+       (imo/format config/defaults)
+       (str "\n")
+       (print "**** formatted ****")))
 
 (def clj-core
-  (delay (load-test-file "clojure_core.clj")))
+  (delay (utils/load-test-file "clojure_core.clj")))

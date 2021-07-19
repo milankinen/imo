@@ -1,11 +1,11 @@
 (ns test-utils
+  (:refer-clojure :exclude [format])
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.walk :refer [postwalk]]
             [imo.util :refer [node?]]
             [imo.core :as imo]
-            [imo.config :as config]
-            [imo.layout.core :as l]))
+            [imo.config :as config]))
 
 (defn load-test-file
   "Loads the contents of the given test file and returns
@@ -16,17 +16,10 @@
       (slurp f)
       (throw (IllegalArgumentException. ^String (str "Test file not found: " filename))))))
 
-(defn src
-  "Creates source from string, stripping out left margin before |"
-  [s]
-  {:pre [(string? s)]}
-  (string/replace s #"(^|\n)[ ]*\|" "$1"))
-
-(defmacro src*
-  "Creates source from the given forms, each form starting
-   from new line"
-  [& forms]
-  (string/join "\n" (map str forms)))
+(defn s
+  "Creates source from the given lines"
+  [& lines]
+  (string/join "\n" lines))
 
 (defn analyze
   "Reads and and analyzes an ast from the given source string using"
@@ -43,7 +36,7 @@
   "Reads and analyzes an ast from the given forms using the default
    configuration"
   [& forms]
-  (->> (vec (map str forms))
+  (->> (vec (map pr-str forms))
        (string/join "\n")
        (analyze)))
 
@@ -56,9 +49,9 @@
   {:pre [(sequential? drop-keys)]}
   (postwalk
     #(if (node? %)
-       (into [(first %) (apply dissoc (cons (inspect (meta %) opts) drop-keys))] (next %))
+       (let [m (->> (apply dissoc (cons (inspect (meta %) opts) drop-keys))
+                    (filter (comp some? second))
+                    (into {}))]
+         (into [(first %) m] (next %)))
        %)
     ast))
-
-(defn empty-test-layout []
-  (l/empty-layout (l/->Context 80)))

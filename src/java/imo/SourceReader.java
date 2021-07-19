@@ -149,13 +149,16 @@ public class SourceReader {
   private <T> T nested(NestedReader<T> reader) {
     AstNode latest = latestReadNode;
     LinkedList<AstNode> pending = pendingMetaNodes;
+    boolean hasPendingMetas = hasPendingMetadataMetaNodes;
     pendingMetaNodes = null;
     latestReadNode = null;
+    hasPendingMetadataMetaNodes = false;
     T result = reader.read();
     // nested reader should leave pending meta nodes clean
     assert pendingMetaNodes == null || pendingMetaNodes.isEmpty();
     latestReadNode = latest;
     pendingMetaNodes = pending;
+    hasPendingMetadataMetaNodes = hasPendingMetas;
     return result;
   }
 
@@ -409,7 +412,7 @@ public class SourceReader {
           _line++;
           _col = 1;
           String comment = readMarkedExceptLast();
-          handleMetaNode(createComment(line, col, comment));
+          handleMetaNode(createComment(line, col, comment), false);
           handleLineBreak(createNewline(line, col + comment.length()));
         }
         break;
@@ -425,7 +428,7 @@ public class SourceReader {
     if (discarded == null) {
       throw new ReaderException("Unexpected EOF after discard");
     }
-    handleMetaNode(createDiscard(line, col, discarded));
+    handleMetaNode(createDiscard(line, col, discarded), true);
     return readNextForm();
   }
 
@@ -446,7 +449,7 @@ public class SourceReader {
         || STRING.equals(type))) {
       throw new ReaderException("Metadata must be Symbol, Keyword, String or Map");
     }
-    handleMetaNode(createMeta(line, col, form));
+    handleMetaNode(createMeta(line, col, form), true);
     hasPendingMetadataMetaNodes = true;
     return readNextForm();
   }
@@ -716,9 +719,9 @@ public class SourceReader {
       // where this exception might occur:
       // (foo ^:bar
       //    )
-      throw new ReaderException("Unmatching paren '" + ((char) endChar) + "'");
+      throw new ReaderException("Unmatching paren '" + ((char) endChar) + "', " + line + ":" + col);
     }
-    return handleNode(new AstNode(line, col, END_OF_COLL, List.of()));
+    return handleNode(new AstNode(line, col, END_OF_COLL, List.of(), 0, 0));
   }
 
   private int readUnicodeChar(String token, int offset, int length, int base) {
@@ -811,7 +814,7 @@ public class SourceReader {
   }
 
   private void handleLineBreak(AstNode breakingNode) {
-    handleMetaNode(breakingNode);
+    handleMetaNode(breakingNode, false);
     markLatestReadNodeAsComplete();
   }
 
@@ -825,7 +828,7 @@ public class SourceReader {
     }
   }
 
-  private void handleMetaNode(AstNode metaNode) {
+  private void handleMetaNode(AstNode metaNode, boolean applyIgnore) {
     if (pendingMetaNodes == null) {
       pendingMetaNodes = new LinkedList<>();
     }
@@ -852,7 +855,7 @@ public class SourceReader {
     }
     unread1();
     String ws = readMarked();
-    handleMetaNode(createSpace(line, col, ws));
+    handleMetaNode(createSpace(line, col, ws), false);
   }
 
   private static boolean isNewline(int ch) {

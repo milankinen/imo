@@ -40,7 +40,10 @@ public interface Keywords {
   Keyword LINE = Keyword.intern("line");
   Keyword COL = Keyword.intern("col");
   Keyword CHILDREN = Keyword.intern("children");
-  Keyword COMMENTS = Keyword.intern("comments");
+  Keyword INNER_LENGTH = Keyword.intern("inner-length");
+  Keyword OUTER_LENGTH = Keyword.intern("outer-length");
+  Keyword INNER_LINES = Keyword.intern("inner-lines");
+  Keyword OUTER_LINES = Keyword.intern("outer-lines");
   Keyword PRE = Keyword.intern("pre");
   Keyword POST = Keyword.intern("post");
 }

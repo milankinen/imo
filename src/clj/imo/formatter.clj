@@ -1,7 +1,12 @@
-(ns imo.formatting
-  (:require [imo.util :refer [node?]]
+(ns imo.formatter
+  (:require [imo.util :refer [node? node->source]]
+            [imo.logger :refer [vvvv vvvvv]]
             [clojure.string :as string]
-            [imo.layout.core :as l]))
+            [imo.formatter.core :as f]
+            [imo.formatter.terminals-formatter]
+            [imo.formatter.vector-formatter]
+            [imo.formatter.list-formatter]
+            [imo.layout :as l]))
 
 (def ^:private non-groupable-top-level-forms
   '#{clojure.core/defn
@@ -22,11 +27,12 @@
 (defn- make-newlines [num-newlines]
   (string/join "" (repeat num-newlines "\n")))
 
-(defn- format-top-level-form [ctx form]
-  (let [layout (-> (l/empty-layout ctx)
-                   (l/add-node form))]
+(defn- format-top-level-form [form {:keys [target-width]}]
+  (vvvv "Formatting top level form at line " (:line (meta form)))
+  (vvvvv "Original form:\n" (node->source form))
+  (let [layout (f/format-node form 0 target-width 0)]
     (assert (some? layout) "Top level form must always return layout")
-    (l/layout->source layout)))
+    (l/render layout)))
 
 (defn- non-whitespace-meta-form? [[node-type]]
   (contains? #{:discard :meta} node-type))
@@ -38,12 +44,12 @@
   {:pre [(pos-int? width)
          (node? root-node)
          (= :$ node-type)]}
-  (let [{:keys [pre post hidden]} (meta root-node)
-        nodes (volatile! (concat pre forms hidden post))
+  (let [{:keys [pre* children* post*]} (meta root-node)
+        nodes (volatile! (concat pre* forms children* post*))
         last-appended-node (volatile! nil)
         newlines (volatile! 0)
         result (StringBuilder.)
-        ctx (l/map->Context {:target-width width})]
+        ctx f/default-ctx]
     (while (seq @nodes)
       (let [node (first @nodes)]
         (case (first node)
@@ -76,11 +82,11 @@
                     (.append result (second node))
                     (when (pos? @newlines)
                       (vreset! last-appended-node node))))
-            (vreset! newlines 0)
-            (vswap! nodes next))
+              (vreset! newlines 0)
+              (vswap! nodes next))
           :form
           (let [[_ form] node
-                formatted (format-top-level-form ctx form)]
+                formatted (format-top-level-form form ctx)]
             (case (first @last-appended-node)
               ;; Nothing formatted yet, just append this form to the
               ;; beginning of the file
@@ -109,9 +115,9 @@
           ;; Every other node: mark actual node as "top level form"
           ;; and flatten its meta nodes to top level
           (let [form (first @nodes)
-                {:keys [pre post hidden]} (meta form)
-                bare-form (vary-meta form dissoc :pre :post :hidden)]
-            (vswap! nodes #(concat pre [[:form bare-form]] hidden post (next %)))))))
+                {:keys [pre* post*]} (meta form)
+                bare-form (vary-meta form dissoc :pre :post)]
+            (vswap! nodes #(concat pre* [[:form bare-form]] post* (next %)))))))
     ;; End non-empty sources with newline
     (when (pos? (.length result))
       (.append result "\n"))

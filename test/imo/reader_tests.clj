@@ -1,22 +1,15 @@
 (ns imo.reader-tests
-  (:refer-clojure :exclude [read])
   (:require [clojure.test :refer :all]
-            [test-utils :refer [src inspect]]
+            [test-utils :refer [s inspect]]
             [imo.core :as imo])
   (:import (imo ImoException)))
 
-(defn- read
-  ([s] (read s {}))
-  ([s {:keys [meta? tab-size] :or {meta? true tab-size 2} :as opts}]
-   (as-> (imo/read (src s) tab-size) ast
-         (if meta?
-           (inspect ast opts)
-           ast))))
+(defn- read* [& lines]
+  (imo/read (apply s lines)))
 
-(def ^:private line-col {:drop-keys [:imo/node :comments]})
-(def ^:private no-line-col {:drop-keys [:imo/node :line :col :comments]})
-(def ^:private comments-only {:drop-keys [:imo/node :line :col]})
-(def ^:private no-meta {:meta? false})
+(def ^:private line-col {:drop-keys [:imo/node :inner-length :outer-length :inner-lines :outer-lines]})
+(def ^:private meta-nodes-only {:drop-keys [:imo/node :line :col :inner-length :outer-length :inner-lines :outer-lines]})
+(def ^:private stats-only {:drop-keys [:imo/node :line :col]})
 
 (deftest leaf-nodes-reading
   (testing "all clojure primitives are supported"
@@ -32,18 +25,17 @@
             [:keyword ":lol/bal"]
             [:keyword "::tsers"]
             [:char "\\space"]]
-           (read "| 123
-                  | 0xDEADBEEF
-                  | nil
-                  | true
-                  | false
-                  | \"tsers\"
-                  | lol
-                  | :bal
-                  | :lol/bal
-                  | ::tsers
-                  | \\space
-                  |" no-meta)))))
+           (read* "123"
+                  "0xDEADBEEF"
+                  "nil"
+                  "true"
+                  "false"
+                  "\"tsers\""
+                  "lol"
+                  ":bal"
+                  ":lol/bal"
+                  "::tsers"
+                  "\\space")))))
 
 (deftest whitespace-reading
   (testing "all whitespaces, comments and discards prior to node are marked as :pre"
@@ -57,9 +49,10 @@
                              [:discard {} [:symbol {} "bar"]]
                              [:newline {} "\n"])}
               "foo"]]
-           (read "|; this is a comment
-                  |  #_  foobar #_bar
-                  |foo" no-line-col))))
+           (-> (read* "; this is a comment"
+                      "  #_  foobar #_bar"
+                      "foo")
+               (inspect meta-nodes-only)))))
   (testing "all whitespaces and discards after node but before first newline are marked as :post"
     (is (= '[:$ {}
              [:symbol {:post ([:space {} " "]
@@ -69,14 +62,16 @@
                               [:newline {} "\n"])}
               "foo"]
              [:symbol {} "bar"]]
-           (read "|foo #_lol #_bal
-                  |bar" no-line-col))))
+           (-> (read* "foo #_lol #_bal"
+                      "bar")
+               (inspect meta-nodes-only)))))
   (testing "whitespace is preseved as it is"
     (is (= '[:$ {}
              [:symbol {} "foo"]
              [:symbol {:pre ([:space {} ",  "])}
               "bar"]]
-           (read "foo,  bar" no-line-col))))
+           (-> (read* "foo,  bar")
+               (inspect meta-nodes-only)))))
   (testing "discards are treated like any other whitespace"
     (is (= '[:$ {}
              [:symbol {:pre ([:space {} " "]
@@ -85,16 +80,18 @@
                              [:discard {} [:symbol {} "foo"]]
                              [:newline {} "\n"])}
               "bar"]]
-           (read "| ; test
-                  |#_foo
-                  |bar" no-line-col)))
+           (-> (read* " ; test"
+                      "#_foo"
+                      "bar")
+               (inspect meta-nodes-only))))
     (is (= '[:$ {}
              [:symbol {:post ([:space {} " "]
                               [:discard {} [:symbol {} "lol"]]
                               [:space {} " "]
                               [:comment {} ";bal"])}
               "bar"]]
-           (read "|bar #_lol ;bal" no-line-col)))))
+           (-> (read* "bar #_lol ;bal")
+               (inspect meta-nodes-only))))))
 
 (deftest line-col-annotations
   (testing "line and column info is added to all read nodes"
@@ -120,11 +117,12 @@
                                          :line 2}
                                "\n"])}
               "bar"]]
-           (read "| ; test
-                  |#_foo
-                  |bar" line-col))))
+           (-> (read* " ; test"
+                      "#_foo"
+                      "bar")
+               (inspect line-col)))))
   (testing "tab size is configurable"
-    (doseq [tab-size [2 4]]
+    (doseq [tab-size [2]]
       (is (= [:$ {:col  1
                   :line 1}
               [:symbol {:col  (inc tab-size)
@@ -133,7 +131,7 @@
                                          :line 1}
                                  "\t"])}
                "bar"]]
-             (read "\tbar" (assoc line-col :tab-size tab-size)))))))
+             (inspect (imo/read "\tbar" tab-size) line-col))))))
 
 (deftest collection-nodes-reading
   (testing "all clojure collections are supported"
@@ -149,40 +147,39 @@
             [:ns-map [:keyword ":foo"] [:map [:keyword ":bar"] [:nil "nil"]]]
             [:ns-map [:keyword "::"] [:map [:keyword ":bar"] [:nil "nil"]]]
             [:ns-map [:keyword "::foo"] [:map [:keyword ":bar"] [:nil "nil"]]]]
-           (read "| (1 2) ()
-                | [1 2] []
-                | #{1 2} #{}
-                | {:lol 1 :bal 2} {}
-                | #:foo {:bar nil}
-                | #:: {:bar nil}
-                | #::foo {:bar nil}
-                |" no-meta))))
+           (read* "(1 2) ()"
+                  "[1 2] []"
+                  "#{1 2} #{}"
+                  "{:lol 1 :bal 2} {}"
+                  "#:foo {:bar nil}"
+                  "#:: {:bar nil}"
+                  "#::foo {:bar nil}"))))
   (testing "leading item whitespace is marked correctly"
     (is (= '[:vector {} [:symbol {:pre ([:space {} "  "])} "foo"]]
-           (last (read "[  foo]" no-line-col))))
+           (-> (read* "[  foo]") (inspect meta-nodes-only) (last))))
     (is (= '[:vector {}
              [:symbol {:pre ([:space {} " "]
                              [:newline {} "\n"]
                              [:space {} " "])}
               "foo"]]
-           (last (read "[ \n foo]" no-line-col)))))
+           (-> (read* "[ \n foo]") (inspect meta-nodes-only) (last)))))
   (testing "trailing item whitespace is marked correctly"
     ; Trailing whitespace
     (is (= '[:vector {} [:symbol {:post ([:space {} "   "])} "foo"]]
-           (last (read "[foo   ]" no-line-col)))))
+           (-> (read* "[foo   ]") (inspect meta-nodes-only) (last)))))
   (testing "floating whitespace (after last item's newline) is marked as :children"
     (is (= '[:vector {:children ([:space {} "  "])}
              [:symbol {:post ([:space {} " "]
                               [:newline {} "\n"])}
               "foo"]]
-           (last (read "[foo \n  ]" no-line-col)))))
+           (-> (read* "[foo \n  ]") (inspect meta-nodes-only) (last)))))
   (testing "empty collection whitespace is marked as :children"
     (is (= '[:vector {:children ([:space {} "   "])}]
-           (last (read "[   ]" no-line-col))))
+           (-> (read* "[   ]") (inspect meta-nodes-only) (last))))
     (is (= '[:vector {:children ([:space {} " "]
                                  [:newline {} "\n"]
                                  [:space {} " "])}]
-           (last (read "[ \n ]" no-line-col))))))
+           (-> (read* "[ \n ]") (inspect meta-nodes-only) (last))))))
 
 (deftest macros-reading
   (testing "all basic macros are supported"
@@ -193,13 +190,12 @@
             [:var-quote [:symbol "var"]]
             [:unquote [:symbol "x"]]
             [:unquote-splice [:symbol "xs"]]]
-           (read "| @val
-                  | 'quoted
-                  | `quoted
-                  | #'var
-                  | ~x
-                  | ~@xs
-                  " no-meta))))
+           (read* "@val"
+                  "'quoted"
+                  "`quoted"
+                  "#'var"
+                  "~x"
+                  "~@xs"))))
   (testing "all dispatch macros are supported"
     (is (= [:$
             [:tagged-literal [:symbol "tagged"] [:string "\"literal\""]]
@@ -208,12 +204,11 @@
             [:reader-cond-splice
              [:list [:keyword ":clj"] [:vector [:number "1"] [:number "2"]]]]
             [:symbolic-val [:symbol "Inf"]]]
-           (read "| #tagged \"literal\"
-                  | #(lol %)
-                  | #?(:clj 123)
-                  | #?@(:clj [1 2])
-                  | ##Inf
-                  " no-meta)))))
+           (read* "#tagged \"literal\""
+                  "#(lol %)"
+                  "#?(:clj 123)"
+                  "#?@(:clj [1 2])"
+                  "##Inf")))))
 
 (deftest metadata-reading
   (testing "symbol, keyword and map metadatas are supported"
@@ -228,8 +223,8 @@
                        [:keyword {} ":doc"]
                        [:symbol {:pre ([:space {} " "])} "..."]]]
                      [:space {} " "])}]]
-           (read "^List ^:private ^{:doc ...} []"
-                 no-line-col))))
+           (-> (read* "^List ^:private ^{:doc ...} []")
+               (inspect meta-nodes-only)))))
   (testing "line breaks between metadata nodes are working"
     (is (= '[:$ {}
              [:vector
@@ -237,9 +232,9 @@
                      [:newline {} "\n"]
                      [:meta {} [:symbol {} "Bal"]]
                      [:space {} " "])}]]
-           (read "|^Foo
-                  |^Bal []"
-                 no-line-col))))
+           (-> (read* "^Foo"
+                      "^Bal []")
+               (inspect meta-nodes-only)))))
   (testing "special case: next node's meta in previous node's :post position"
     (is (= '[:$ {}
              [:symbol {:post ([:space {} " "])}
@@ -249,50 +244,187 @@
                              [:newline {} "\n"]
                              [:space {} " "])}
               "bal"]]
-           (read "|foo ^Lol
-                  | bal" no-line-col)))))
+           (-> (read* "foo ^Lol"
+                      " bal")
+               (inspect meta-nodes-only))))))
 
-(deftest comments-reading
-  (testing "comments are counted and summed inside node"
-    (is (= '[:$ {:comments 3}
-             [:list {:comments 3
-                     :pre      ([:comment {:comments 1} "; declare foo function"]
-                                [:newline {:comments 0} "\n"])}
-              [:symbol {:comments 0} "defn"]
-              [:symbol {:comments 0
-                        :pre      ([:space {:comments 0} " "])}
+(deftest node-stats-reading
+  (testing "nodes contain information about their minimun length and required linebreaks"
+    (is (= '[:$
+             {:inner-length 38
+              :inner-lines  3
+              :outer-length 38
+              :outer-lines  3}
+             [:list
+              {:inner-length 38
+               :inner-lines  2
+               :outer-length 38
+               :outer-lines  3
+               :pre          ([:comment
+                               {:inner-length 0
+                                :inner-lines  1
+                                :outer-length 0
+                                :outer-lines  1}
+                               "; declare foo function"]
+                              [:newline
+                               {:inner-length 0
+                                :inner-lines  0
+                                :outer-length 0
+                                :outer-lines  0}
+                               "\n"])}
+              [:symbol
+               {:inner-length 4
+                :inner-lines  0
+                :outer-length 4
+                :outer-lines  0}
+               "defn"]
+              [:symbol
+               {:inner-length 3
+                :inner-lines  0
+                :outer-length 3
+                :outer-lines  0
+                :pre          ([:space
+                                {:inner-length 0
+                                 :inner-lines  0
+                                 :outer-length 0
+                                 :outer-lines  0}
+                                " "])}
                "foo"]
-              [:vector {:comments 1
-                        :post     ([:newline {:comments 0} "\n"])
-                        :pre      ([:space {:comments 0} " "])}
-               [:symbol {:comments 1
-                         :post     ([:space {:comments 0} " "]
-                                    [:comment {:comments 1} "; first arg"]
-                                    [:newline {:comments 0} "\n"])}
+              [:vector
+               {:inner-length 15
+                :inner-lines  1
+                :outer-length 15
+                :outer-lines  1
+                :post         ([:newline
+                                {:inner-length 0
+                                 :inner-lines  0
+                                 :outer-length 0
+                                 :outer-lines  0}
+                                "\n"])
+                :pre          ([:space
+                                {:inner-length 0
+                                 :inner-lines  0
+                                 :outer-length 0
+                                 :outer-lines  0}
+                                " "])}
+               [:symbol
+                {:inner-length 3
+                 :inner-lines  0
+                 :outer-length 3
+                 :outer-lines  1
+                 :post         ([:space
+                                 {:inner-length 0
+                                  :inner-lines  0
+                                  :outer-length 0
+                                  :outer-lines  0}
+                                 " "]
+                                [:comment
+                                 {:inner-length 0
+                                  :inner-lines  1
+                                  :outer-length 0
+                                  :outer-lines  1}
+                                 "; first arg"]
+                                [:newline
+                                 {:inner-length 0
+                                  :inner-lines  0
+                                  :outer-length 0
+                                  :outer-lines  0}
+                                 "\n"])}
                 "bar"]
-               [:symbol {:comments 0
-                         :pre      ([:space {:comments 0} "           "])}
+               [:symbol
+                {:inner-length 3
+                 :inner-lines  0
+                 :outer-length 9
+                 :outer-lines  0
+                 :pre          ([:space
+                                 {:inner-length 0
+                                  :inner-lines  0
+                                  :outer-length 0
+                                  :outer-lines  0}
+                                 "           "]
+                                [:meta
+                                 {:inner-length 5
+                                  :inner-lines  0
+                                  :outer-length 5
+                                  :outer-lines  0}
+                                 [:symbol
+                                  {:inner-length 4
+                                   :inner-lines  0
+                                   :outer-length 4
+                                   :outer-lines  0}
+                                  "long"]]
+                                [:space
+                                 {:inner-length 0
+                                  :inner-lines  0
+                                  :outer-length 0
+                                  :outer-lines  0}
+                                 " "])}
                 "baz"]]
-              [:list {:comments 1
-                      :pre      ([:space {:comments 0} "  "]
-                                 [:comment {:comments 1} "; subtract bar from baz"]
-                                 [:newline {:comments 0} "\n"]
-                                 [:space {:comments 0} "  "])}
-               [:symbol {:comments 0}
+              [:list
+               {:inner-length 11
+                :inner-lines  0
+                :outer-length 11
+                :outer-lines  1
+                :pre          ([:space
+                                {:inner-length 0
+                                 :inner-lines  0
+                                 :outer-length 0
+                                 :outer-lines  0}
+                                "  "]
+                               [:comment
+                                {:inner-length 0
+                                 :inner-lines  1
+                                 :outer-length 0
+                                 :outer-lines  1}
+                                "; subtract bar from baz"]
+                               [:newline
+                                {:inner-length 0
+                                 :inner-lines  0
+                                 :outer-length 0
+                                 :outer-lines  0}
+                                "\n"]
+                               [:space
+                                {:inner-length 0
+                                 :inner-lines  0
+                                 :outer-length 0
+                                 :outer-lines  0}
+                                "  "])}
+               [:symbol
+                {:inner-length 1
+                 :inner-lines  0
+                 :outer-length 1
+                 :outer-lines  0}
                 "-"]
-               [:symbol {:comments 0
-                         :pre      ([:space {:comments 0}
-                                     " "])}
+               [:symbol
+                {:inner-length 3
+                 :inner-lines  0
+                 :outer-length 3
+                 :outer-lines  0
+                 :pre          ([:space
+                                 {:inner-length 0
+                                  :inner-lines  0
+                                  :outer-length 0
+                                  :outer-lines  0}
+                                 " "])}
                 "baz"]
-               [:symbol {:comments 0
-                         :pre      ([:space {:comments 0} " "])}
+               [:symbol
+                {:inner-length 3
+                 :inner-lines  0
+                 :outer-length 3
+                 :outer-lines  0
+                 :pre          ([:space
+                                 {:inner-length 0
+                                  :inner-lines  0
+                                  :outer-length 0
+                                  :outer-lines  0}
+                                 " "])}
                 "bar"]]]]
-           (read "|; declare foo function
-                  |(defn foo [bar ; first arg
-                  |           baz]
-                  |  ; subtract bar from baz
-                  |  (- baz bar))"
-                 comments-only)))))
+           (-> (read* "; declare foo function"
+                      "(defn foo [bar ; first arg"
+                      "           ^long baz]"
+                      "  ; subtract bar from baz"
+                      "  (- baz bar))")
+               (inspect stats-only))))))
 
 (deftest discard+meta-reading
   (testing "discarding is applied to the node after meta nodes"
@@ -304,7 +436,8 @@
                                           [:keyword {} ":bar"]]
                                          [:space {} " "])}
                           "123"]])}]
-           (read "#_^:foo ^:bar 123" no-line-col)))))
+           (-> (read* "#_^:foo ^:bar 123")
+               (inspect meta-nodes-only))))))
 
 (deftest meta+discard-reading
   (testing "discarding is applied to the node after meta nodes"
@@ -316,7 +449,8 @@
                               [:number {} "1"]]
                              [:space {} " "])}
               "2"]]
-           (read "^:foo #_1 2" no-line-col)))))
+           (-> (read* "^:foo #_1 2")
+               (inspect meta-nodes-only))))))
 
 (deftest nested-discard-reading
   (testing "discards can be nested"
@@ -327,12 +461,13 @@
                                "2"]]
                              [:space {} " "])}
               "3"]]
-           (read "#_#_1 2 3" no-line-col)))))
+           (-> (read* "#_#_1 2 3")
+               (inspect meta-nodes-only))))))
 
 (deftest danling-metadata-nodes-reading
   (testing "dangling metadata nodes before end of collection should throw an exception"
     (is (thrown? ImoException "Unmatching paren ')'"
-                 (read "(foo ^:bar \n)"))))
+                 (read* "(foo ^:bar \n)"))))
   (testing "dangling metadata nodes before end of file should throw an exception"
-    (is (thrown? ImoException "EOF while reading")
-        (read "foo ^:bar"))))
+    (is (thrown? ImoException "EOF while reading"
+                 (read* "foo ^:bar")))))

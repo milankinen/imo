@@ -1,71 +1,51 @@
 (ns imo.ignore-tests
   (:require [clojure.test :refer :all]
-            [test-utils :refer [src analyze inspect]]))
+            [test-utils :refer [s analyze inspect]]))
+
+(def non-relevant-meta-keys
+  [:imo/node :line :col :inner-length :outer-length :inner-lines :outer-lines :pre* :post*])
 
 (deftest ignore-analysis
   (testing "#_:imo/ignore marks next node as ignored"
     (let [[_ [_ _ & nodes]]
-          (analyze (src "|(do 1
-                         |    #_:imo/ignore
-                         |    [2]
-                         |    3)"))]
-      (is (= '[[:number {:post ([:newline {} "\n"])
-                         :pre  ([:space {} " "])}
-                "1"]
+          (analyze (s "(do 1"
+                      "    #_:imo/ignore"
+                      "    [2]"
+                      "    3)"))]
+      (is (= '[[:number {} "1"]
                [:vector {:ignore? true
-                         :post    ([:newline {} "\n"])
-                         :pre     ([:space {} "    "]
-                                   [:discard {}
-                                    [:keyword {} ":imo/ignore"]]
-                                   [:newline {} "\n"]
-                                   [:space {} "    "])}
+                         :pre     ([:discard {}
+                                    [:keyword {} ":imo/ignore"]])}
                 [:number {} "2"]]
-               [:number {:pre ([:space {} "    "])}
+               [:number {}
                 "3"]]
-             (inspect nodes {:drop-keys [:imo/node :line :col :comments]})))))
+             (inspect nodes {:drop-keys non-relevant-meta-keys})))))
   (testing "ignore works for other meta nodes as well"
     (let [[_ [_ _ & nodes]]
-          (analyze (src "|(do 1
-                         |    #_:imo/ignore
-                         |    #_(foo 2)
-                         |    3)"))]
-      (is (= '[[:number
-                {:post ([:newline {} "\n"])
-                 :pre  ([:space {} " "])}
-                "1"]
+          (analyze (s "(do 1"
+                      "    #_:imo/ignore"
+                      "    #_(foo 2)"
+                      "    3)"))]
+      (is (= '[[:number {} "1"]
                [:number
-                {:pre ([:space {} "    "]
-                       [:discard {}
+                {:pre ([:discard {}
                         [:keyword {} ":imo/ignore"]]
-                       [:newline {} "\n"]
-                       [:space {} "    "]
                        [:discard {:ignore? true}
                         [:list {:invocation foo
                                 :resolve-as foo}
                          [:symbol {} "foo"]
-                         [:number {:pre ([:space {} " "])}
-                          "2"]]]
-                       [:newline {} "\n"]
-                       [:space {} "    "])}
+                         [:number {} "2"]]])}
                 "3"]]
-             (inspect nodes {:drop-keys [:imo/node :line :col :comments]}))))
+             (inspect nodes {:drop-keys non-relevant-meta-keys}))))
     (let [[_ [_ _ & nodes]]
-          (analyze (src "|(do 1
-                         |    #_:imo/ignore
-                         |    ^:foo
-                         |    3)"))]
-      (is (= '[[:number
-                {:post ([:newline {} "\n"])
-                 :pre  ([:space {} " "])}
-                "1"]
-               [:number {:pre ([:space {} "    "]
-                               [:discard {}
+          (analyze (s "(do 1"
+                      "    #_:imo/ignore"
+                      "    ^:foo"
+                      "    3)"))]
+      (is (= '[[:number {} "1"]
+               [:number {:pre ([:discard {}
                                 [:keyword {} ":imo/ignore"]]
-                               [:newline {} "\n"]
-                               [:space {} "    "]
                                [:meta {:ignore? true}
-                                [:keyword {} ":foo"]]
-                               [:newline {} "\n"]
-                               [:space {} "    "])}
+                                [:keyword {} ":foo"]])}
                 "3"]]
-             (inspect nodes {:drop-keys [:imo/node :line :col :comments]}))))))
+             (inspect nodes {:drop-keys non-relevant-meta-keys}))))))

@@ -275,8 +275,8 @@
                                    [[*in* *out* "STDIN" "STDIN"]])
                   log-level (get options :verbosity 0)
                   check-mode? (true? (get options :check))]
-              (binding [logger/*debug-out* (if stdin? *err* *out*)
-                        logger/*log-level* log-level]
+              (logger/set-log-level! log-level)
+              (binding [logger/*debug-out* (if stdin? *err* *out*)]
                 (vv "using config: " config)
                 (if check-mode?
                   (check-files! config inputs+outputs (boolean (:show-diff options)))

@@ -65,6 +65,12 @@
     (Util/spaces n)
     ""))
 
+(defn ^long maxl
+  "Fast version of clojure.core/max, for longs only."
+  {:inline (fn [a b] `(Util/maxLong ~a ~b))}
+  [a b]
+  (Util/maxLong a b))
+
 (defn node? [x]
   (and (vector? x)
        (true? (:imo/node (meta x)))))
@@ -73,9 +79,15 @@
   {:pre [(keyword? node-type)]}
   (AstNode/getBeginChars node-type))
 
+(defn all-begin-chars []
+  (set (AstNode/getAllBeginChars)))
+
 (defn end-chars [node-type]
   {:pre [(keyword? node-type)]}
   (AstNode/getEndChars node-type))
+
+(defn all-end-chars []
+  (set (AstNode/getAllEndChars)))
 
 (defn simple-name-str? [s]
   {:pre [(string? s)]}
@@ -84,11 +96,11 @@
 (defn node->source [node]
   {:pre [(node? node)]}
   (letfn [(to-str! [^StringBuilder sb node]
-            (doseq [n (:pre (meta node))]
+            (doseq [n (or (:pre* (meta node)) (:pre (meta node)))]
               (to-str! sb n))
             (when-let [chars (begin-chars (first node))]
               (.append sb ^String chars))
-            (doseq [child (concat (next node) (:hidden (meta node)))]
+            (doseq [child (concat (next node) (or (:children* (meta node)) (:children (meta node))))]
               (cond
                 (vector? child) (to-str! sb child)
                 (string? child) (.append sb ^String child)
@@ -96,7 +108,7 @@
                 :else (throw (RuntimeException. (str "Invalid node: " (pr-str child))))))
             (when-let [chars (end-chars (first node))]
               (.append sb ^String chars))
-            (doseq [n (:post (meta node))]
+            (doseq [n (or (:post* (meta node)) (:post (meta node)))]
               (to-str! sb n)))]
     (let [sb (StringBuilder.)]
       (to-str! sb node)
@@ -127,3 +139,32 @@
 (defn invalid? [node]
   {:pre [(node? node)]}
   (boolean (invalid* node)))
+
+(defn may-fit-one-line? [node line-width]
+  {:pre [(node? node)
+         (number? line-width)]}
+  (let [{:keys [inner-length inner-lines]} (meta node)]
+    (and (zero? inner-lines)
+         (<= inner-length line-width))))
+
+(defn may-all-fit-one-line? [nodes line-width]
+  {:pre [(number? line-width)]}
+  (loop [[x & xs :as nodes] (seq nodes)
+         len 0]
+    (if nodes
+      (if x
+        (let [{:keys [inner-length inner-lines]} (meta x)
+              len (long (+ len inner-length))]
+          (if (and (zero? inner-lines)
+                   (<= len line-width))
+            (recur xs len)
+            false))
+        (recur xs len))
+      true)))
+
+(defn outer-nodes [node]
+  {:pre [(or (node? node)
+             (nil? node))]}
+  (when node
+    (let [{:keys [pre post]} (meta node)]
+      (filter some? (concat pre [node] post)))))
