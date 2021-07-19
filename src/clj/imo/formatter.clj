@@ -6,6 +6,8 @@
             [imo.formatter.terminals-formatter]
             [imo.formatter.vector-formatter]
             [imo.formatter.list-formatter]
+            [imo.formatter.map-formatter]
+            [imo.formatter.meta-formatter]
             [imo.layout :as l]))
 
 (def ^:private non-groupable-top-level-forms
