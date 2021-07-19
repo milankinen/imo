@@ -33,13 +33,9 @@
 
 (comment
 
-
-  (format* {:foo
-            12})
-
-  (format* 123)
-
-  (format (analyze "[112312123 2 ; comment \nasd]"))
-  (format* [124 123 123 124 123 123 124 123 123 124 123 123 124 123 123 124 123 123 124 123 123 124 123 123])
+  (fmt* 1)
+  (fmt* :foo/bar)
+  (fmt* "tsers")
+  (fmt* 'simple-symbol?)
 
   -)

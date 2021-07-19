@@ -227,6 +227,9 @@
 (defn builder [offset target-width alternative]
   (LayoutBuilder. offset target-width alternative))
 
+(defn b-offset [^LayoutBuilder builder]
+  (.-offset builder))
+
 (defn append! [^LayoutBuilder builder item]
   (when (and item builder)
     (cond
@@ -252,11 +255,12 @@
         (.setOffset (+ (.-offset builder) item))
         (.addItem item))
       :else
-      (let [rel-o (-relative-offset item)
+      (let [offset (.-offset builder)
+            rel-o (-relative-offset item)
             rel-w (if (>= rel-o 0) (-relative-width item) -1)
             offset (if (>= rel-o 0)
-                     (+ (.-offset builder) rel-o)
-                     (next-offset item (.-offset builder)))]
+                     (+ offset rel-o)
+                     (next-offset item offset))]
         (doto builder
           (.setOffset offset)
           (.updateRelativeValues rel-o rel-w)
@@ -265,7 +269,23 @@
 
 (defn append-node! [^LayoutBuilder builder node formatter]
   (if node
-    (append! builder (formatter node (.-offset builder) (.-targetWidth builder) (.-alternative builder)))
+    (if (or (integer? node)
+            (keyword? node)
+            (string? node))
+      (append! builder node)
+      (append! builder (formatter node (.-offset builder) (.-targetWidth builder) (.-alternative builder))))
+    builder))
+
+(defn append-node-one-line! [^LayoutBuilder builder node formatter]
+  (if node
+    (if (or (integer? node)
+            (keyword? node)
+            (string? node))
+      (append! builder node)
+      (when-some [item (formatter node (.-offset builder) (.-targetWidth builder) (.-alternative builder))]
+        (when (or (zero? (.-alternative builder))
+                  (zero? (line-breaks item)))
+          (append! builder item))))
     builder))
 
 (defn build! [^LayoutBuilder builder]
@@ -274,18 +294,3 @@
         rel-w (.-relativeWidth builder)
         breaks (.-lineBreaks builder)]
     (with-layout-meta v rel-o rel-w breaks)))
-
-(defn append-node [^LayoutBuilder builder maybe-node formatter]
-  (if maybe-node
-    (when-some [item (formatter maybe-node (.-offset builder) (.-targetWidth builder) (.-alternative builder))]
-      (let [rel-o (-relative-offset item)
-            rel-w (if (>= rel-o 0) (-relative-width item) -1)
-            offset (if (>= rel-o 0)
-                     (+ (.-offset builder) rel-o)
-                     (next-offset item (.-offset builder)))]
-        (set! (.-relativeOffset builder) rel-o)
-        (set! (.-relativeWidth builder) (if (>= rel-w 0)
-                                          (maxl rel-w (.-relativeWidth builder))
-                                          -1))
-        (set! (.-offset builder) offset)))
-    builder))

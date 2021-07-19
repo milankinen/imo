@@ -140,6 +140,11 @@
   {:pre [(node? node)]}
   (boolean (invalid* node)))
 
+(defn has-children? [node]
+  {:pre [(node? node)]}
+  (or (> (count node) 1)
+      (> (count (:children (meta node))) 0)))
+
 (defn may-fit-one-line? [node line-width]
   {:pre [(node? node)
          (number? line-width)]}
