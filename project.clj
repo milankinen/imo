@@ -15,9 +15,11 @@
   :target-path "target/%s"
   :uberjar-name "imo.jar"
   :global-vars {*warn-on-reflection* true}
-  :profiles {:dev     {:jvm-opts     [~(str "-Dimo.version=" :project/version)]
-                       :repl-options {:init-ns repl}
-                       :global-vars  {*warn-on-reflection* true}}
+  :profiles {:dev     {:jvm-opts          [~(str "-Dimo.version=" :project/version)]
+                       :repl-options      {:init-ns repl}
+                       :global-vars       {*warn-on-reflection* true}
+                       :dependencies      [[com.github.milankinen/replex "0.0.1"]]
+                       :java-source-paths ["dev/java"]}
              :test    {:dependencies [[eftest "0.5.9"]]}
              :linter  {:dependencies ^:replace [[clj-kondo "2021.06.18"]]
                        :global-vars  {*warn-on-reflection* false}}

@@ -3,6 +3,7 @@
             [imo.logger :as logger]
             [test-utils :as utils]
             [imo.util :refer [node?]]
+            [replex.core :as replex]
             [imo.config :as config]
             [imo.core :as imo]))
 
@@ -66,3 +67,31 @@
 
 (def clj-core
   (delay (utils/load-test-file "clojure_core.clj")))
+
+(replex/set-repl-ns 'repl)
+(replex/set-injected-globals
+  '{analyze  repl/analyze
+    explain  repl/explain
+    analyze* repl/analyze*
+    explain* repl/explain*
+    fmt      repl/fmt
+    fmt*     repl/fmt*
+    ctx      imo.formatter.core/default-ctx})
+
+(comment
+
+  (logger/set-log-level! 4)
+  (logger/set-log-level! 3)
+
+  (def root (analyze @clj-core))
+
+  (time (do (->> (analyze @clj-core)
+                 (imo/format config/defaults))
+            nil))
+
+  (->> (analyze @clj-core)
+       (imo/format config/defaults)
+       (spit "target/testing.clj"))
+
+
+  -)
