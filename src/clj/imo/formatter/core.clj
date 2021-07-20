@@ -1,22 +1,24 @@
 (ns imo.formatter.core
-  (:require [imo.util :refer [node? spaces terminal-node-types whitespace-node-types split-lines begin-chars end-chars maxl]]
-            [imo.layout :as l])
+  (:require [imo.util :refer [node? spaces terminal-node-types whitespace-node-types split-lines
+                              begin-chars end-chars maxl may-outer-fit-one-line?]]
+            [imo.layout.core :as l]
+            [imo.layout.builder :as b])
   (:import (java.util LinkedList)))
 
 (defrecord Context
   [^long target-width
    ^long alternative])
 
-(defn context? [x]
-  (instance? Context x))
-
 (def default-ctx
   (map->Context {:target-width 80
                  :alternative  0}))
 
-(defn preserve-format
-  "Creates a layout that tries to preserve the original formatting
-   as much as possible"
+(defn context? [x]
+  (instance? Context x))
+
+(defn format-inner-node-preserve-formatting
+  "Creates a layout that tries to preserve the original node
+   formatting as much as possible"
   [node]
   {:pre [(node? node)]}
   (let [alignment (dec (:col (meta node)))]
@@ -75,26 +77,107 @@
            (mapv #(update % :content str))
            (l/multiline)))))
 
-(defmulti format-node (fn [node _offset _target-width _alternative] (first node)))
+(defmulti format-inner-node (fn [node _offset _target-width _alternative] (first node)))
 
-(defmethod format-node :comment [[_ text] _ _ _]
+(defmethod format-inner-node :comment [[_ text] _ _ _]
   (l/comment text))
 
-(defmethod format-node :space [node _ _ _]
+(defmethod format-inner-node :space [node _ _ _]
   ;; All whitespace nodes should be removed before the canonical
   ;; formatting so this implementation should not be called, unless
   ;; there is a bug somewhere.
   (throw (RuntimeException. (str "Tried to format :space node at " (pr-str (select-keys (meta node) [:col :line]))))))
 
-(defmethod format-node :newline [node _ _ _]
+(defmethod format-inner-node :newline [node _ _ _]
   ;; All whitespace nodes should be removed before the canonical
   ;; formatting so this implementation should not be called, unless
   ;; there is a bug somewhere.
   (throw (RuntimeException. (str "Tried to format :newline node at " (pr-str (select-keys (meta node) [:col :line]))))))
 
-
-(defmethod format-node :default [node offset target-width alternative]
-  (let [layout (preserve-format node)]
+(defmethod format-inner-node :default [node offset target-width alternative]
+  (let [layout (format-inner-node-preserve-formatting node)]
     (when (or (zero? alternative)
               (<= (l/width layout offset) target-width))
       layout)))
+
+;;;;
+
+(defn format-outer-node-one-line
+  ([node offset target-width alternative]
+   (format-outer-node-one-line node offset target-width alternative format-inner-node))
+  ([node offset target-width alternative format-inner]
+   (if (vector? node)
+     (when (or (zero? alternative)
+               (may-outer-fit-one-line? node (- target-width offset)))
+       (let [{:keys [pre post]} (meta node)
+             builder (b/builder offset target-width alternative)
+             builder (if (seq pre)
+                       (loop [b builder
+                              [x & xs] pre]
+                         (if (and b x)
+                           (when-some [n (format-outer-node-one-line x (b/offset b) target-width alternative)]
+                             (when (or (zero? (l/line-breaks n))
+                                       (zero? alternative))
+                               (recur (-> (b/add! b n)
+                                          (b/add! 1))
+                                      xs)))
+                           b))
+                       builder)
+             builder (when builder
+                       (when-some [n (format-inner node (b/offset builder) target-width alternative)]
+                         (when (or (zero? (l/line-breaks n))
+                                   (zero? alternative))
+                           (b/add! builder n))))
+             builder (if (and (seq post) builder)
+                       (loop [b (b/add! builder 1)
+                              [x & xs] post]
+                         (if (and b x)
+                           (when-some [n (format-outer-node-one-line x (b/offset b) target-width alternative)]
+                             (when (or (zero? (l/line-breaks n))
+                                       (zero? alternative))
+                               (recur (-> (b/add! b 1)
+                                          (b/add! n))
+                                      xs)))
+                           b))
+                       builder)]
+         (some-> builder (b/build!))))
+     ;; spaces, breaks etc
+     node)))
+
+;; TODO trailing comments should not be aligned!
+(defn format-outer-node-align-meta
+  ([node offset target-width alternative]
+   (format-outer-node-align-meta node offset target-width alternative format-inner-node))
+  ([node offset target-width alternative format-inner]
+   (if (vector? node)
+     (when (or (zero? alternative)
+               (may-outer-fit-one-line? node (- target-width offset)))
+       (let [{:keys [pre post]} (meta node)
+             builder (-> (b/builder offset target-width alternative)
+                         (b/add! :align))
+             builder (if (seq pre)
+                       (loop [b builder
+                              [x & xs] pre]
+                         (if (and b x)
+                           (when-some [n (format-outer-node-align-meta x (b/offset b) target-width alternative)]
+                             (recur (-> (b/add! b n)
+                                        (b/add! :break))
+                                    xs))
+                           b))
+                       builder)
+             builder (when builder
+                       (when-some [n (format-inner node (b/offset builder) target-width alternative)]
+                         (b/add! builder n)))
+             builder (if (and (seq post) builder)
+                       (loop [b (b/add! builder :break)
+                              [x & xs] post]
+                         (if (and b x)
+                           (when-some [n (format-outer-node-align-meta x (b/offset b) target-width alternative)]
+                             (recur (-> (b/add! b :break)
+                                        (b/add! n))
+                                    xs))
+                           b))
+                       builder)]
+         (some-> builder (b/add! :dealign) (b/build!))))
+     ;; spaces, breaks etc
+     node)))

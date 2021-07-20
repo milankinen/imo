@@ -1,17 +1,19 @@
 (ns imo.formatter.terminals-formatter
-  (:require [imo.layout :as l]
+  (:require [imo.layout.core :as l]
             [imo.util :refer [split-lines terminal-node-types]]
-            [imo.formatter.core :refer [format-node]]))
+            [imo.formatter.core :refer [format-inner-node]]))
 
-(defn format-terminal [[_ ^String s] offset target-width alternative]
-  (when (or (zero? alternative)
-            (<= (+ offset (.length s)) target-width))
-    s))
+(doseq [node-type terminal-node-types
+        :when (not= :string node-type)]
+  (defmethod format-inner-node node-type [[_ ^String s] offset target-width alternative]
+    (when (or (zero? alternative)
+              (<= (+ offset (.length s)) target-width))
+      s)))
 
-(defn format-string [[_ ^String s] offset target-width alternative]
+(defmethod format-inner-node :string [[_ ^String s] offset target-width alternative]
   (let [lines (split-lines s)
         layout (case (count lines)
-                 1 (l/token s)
+                 1 s
                  (->> (for [line (next lines)]
                         {:absolute true
                          :content  line})
@@ -21,14 +23,6 @@
     (when (or (zero? alternative)
               (<= (l/width layout offset) target-width))
       layout)))
-
-(doseq [node-type terminal-node-types
-        :when (not= :string node-type)]
-  (defmethod format-node node-type [node offset target-width alternative]
-    (format-terminal node offset target-width alternative)))
-
-(defmethod format-node :string [node offset target-width alternative]
-  (format-string node offset target-width alternative))
 
 
 (comment

@@ -1,9 +1,8 @@
-(ns imo.layout
+(ns imo.layout.core
   (:refer-clojure :exclude [comment empty])
   (:require [imo.util :refer [maxl spaces]]
             [clojure.string :as string])
-  (:import (clojure.lang IPersistentVector)
-           (imo LayoutBuilder)))
+  (:import (clojure.lang IPersistentVector)))
 
 (defprotocol ILayout
   :extend-via-metadata true
@@ -114,7 +113,7 @@
 
 (defn- not-relative [_] -1)
 
-(defn- with-layout-meta [v rel-o rel-w breaks]
+(defn -with-layout-meta [v rel-o rel-w breaks]
   (let [m (transient {`line-breaks (fn [_] breaks)})
         m (if (>= 0 rel-o)
             (assoc! m
@@ -134,7 +133,7 @@
         rel-o (-relative-offset v)
         rel-w (if (>= rel-o 0) (-relative-width v) -1)
         breaks (line-breaks v)]
-    (with-layout-meta v rel-o rel-w breaks)))
+    (-with-layout-meta v rel-o rel-w breaks)))
 
 (defrecord Comment [text])
 
@@ -206,9 +205,6 @@
                  xs))
         (string/join "\n" contents)))))
 
-(defn token [^String s]
-  s)
-
 (defn multiline [lines]
   {:pre [(sequential? lines)
          (every? #(and (boolean? (:absolute %))
@@ -224,73 +220,4 @@
             (persistent!)
             (create))))))
 
-(defn builder [offset target-width alternative]
-  (LayoutBuilder. offset target-width alternative))
-
-(defn b-offset [^LayoutBuilder builder]
-  (.-offset builder))
-
-(defn append! [^LayoutBuilder builder item]
-  (when (and item builder)
-    (cond
-      (= :break item)
-      (doto builder
-        (.addLineBreaks 1)
-        (.setOffset (first (.-aligns builder)))
-        (.addItem item))
-      (= :align item)
-      (doto builder
-        (.align (.-offset builder))
-        (.addItem item))
-      (= :align-indent item)
-      (doto builder
-        (.align (inc (.-offset builder)))
-        (.addItem item))
-      (= :dealign item)
-      (doto builder
-        (.dealign)
-        (.addItem item))
-      (integer? item)
-      (doto builder
-        (.setOffset (+ (.-offset builder) item))
-        (.addItem item))
-      :else
-      (let [offset (.-offset builder)
-            rel-o (-relative-offset item)
-            rel-w (if (>= rel-o 0) (-relative-width item) -1)
-            offset (if (>= rel-o 0)
-                     (+ offset rel-o)
-                     (next-offset item offset))]
-        (doto builder
-          (.setOffset offset)
-          (.updateRelativeValues rel-o rel-w)
-          (.addLineBreaks (line-breaks item))
-          (.addItem item))))))
-
-(defn append-node! [^LayoutBuilder builder node formatter]
-  (if node
-    (if (or (integer? node)
-            (keyword? node)
-            (string? node))
-      (append! builder node)
-      (append! builder (formatter node (.-offset builder) (.-targetWidth builder) (.-alternative builder))))
-    builder))
-
-(defn append-node-one-line! [^LayoutBuilder builder node formatter]
-  (if node
-    (if (or (integer? node)
-            (keyword? node)
-            (string? node))
-      (append! builder node)
-      (when-some [item (formatter node (.-offset builder) (.-targetWidth builder) (.-alternative builder))]
-        (when (or (zero? (.-alternative builder))
-                  (zero? (line-breaks item)))
-          (append! builder item))))
-    builder))
-
-(defn build! [^LayoutBuilder builder]
-  (let [v (persistent! (.-contents builder))
-        rel-o (.-relativeOffset builder)
-        rel-w (.-relativeWidth builder)
-        breaks (.-lineBreaks builder)]
-    (with-layout-meta v rel-o rel-w breaks)))
+(def ^:const space 1)

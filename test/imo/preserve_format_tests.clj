@@ -1,8 +1,8 @@
 (ns imo.preserve-format-tests
   (:require [clojure.test :refer :all]
             [test-utils :refer [s analyze]]
-            [imo.formatter.core :refer [preserve-format]]
-            [imo.layout :as l]))
+            [imo.formatter.core :refer [format-inner-node-preserve-formatting]]
+            [imo.layout.core :as l]))
 
 (deftest column-offset-shifting
   (testing "shifting preserved node left"
@@ -13,7 +13,7 @@
                 "  {:a 1"
                 "      :b 2})")
              (-> ["(def foo" :break
-                  "  " (preserve-format map-node) ")"]
+                  "  " (format-inner-node-preserve-formatting map-node) ")"]
                  (l/render))))))
   (testing "shifting preserved node right"
     (let [[_ [_ _ _ map-node]]
@@ -21,7 +21,7 @@
                       "             :b 2})"))]
       (is (= (s "(def foobar {:a 1"
                 "                :b 2})")
-             (-> ["(def foobar " (preserve-format map-node) ")"]
+             (-> ["(def foobar " (format-inner-node-preserve-formatting map-node) ")"]
                  (l/render))))))
   (testing "multiline strings are not shifted"
     (let [[_ [_ _ _ vec-node]]
@@ -31,13 +31,13 @@
       (is (= (s "(def foobar [1 \"multi"
                 "               line\" 2"
                 "             3])")
-             (-> ["(def foobar " (preserve-format vec-node) ")"]
+             (-> ["(def foobar " (format-inner-node-preserve-formatting vec-node) ")"]
                  (l/render))))
       (is (= (s "(def foobar"
                 "  [1 \"multi"
                 "               line\" 2"
                 "   3])")
              (-> (-> ["(def foobar" :break
-                      "  " (preserve-format vec-node) ")"]
+                      "  " (format-inner-node-preserve-formatting vec-node) ")"]
                      (l/render))
                  (l/render)))))))

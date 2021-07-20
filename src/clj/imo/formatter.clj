@@ -8,7 +8,7 @@
             [imo.formatter.list-formatter]
             [imo.formatter.map-formatter]
             [imo.formatter.meta-formatter]
-            [imo.layout :as l]))
+            [imo.layout.core :as l]))
 
 (def ^:private non-groupable-top-level-forms
   '#{clojure.core/defn
@@ -32,7 +32,9 @@
 (defn- format-top-level-form [form {:keys [target-width]}]
   (vvvv "Formatting top level form at line " (:line (meta form)))
   (vvvvv "Original form:\n" (node->source form))
-  (let [layout (f/format-node form 0 target-width 0)]
+  ;; we know that outer nodes (:pre :post) has already formatted
+  ;; separately for top level noodes
+  (let [layout (f/format-inner-node form 0 target-width 0)]
     (assert (some? layout) "Top level form must always return layout")
     (l/render layout)))
 

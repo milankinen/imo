@@ -152,6 +152,13 @@
     (and (zero? inner-lines)
          (<= inner-length line-width))))
 
+(defn may-outer-fit-one-line? [node line-width]
+  {:pre [(node? node)
+         (number? line-width)]}
+  (let [{:keys [outer-length outer-lines]} (meta node)]
+    (and (zero? outer-lines)
+         (<= outer-length line-width))))
+
 (defn may-all-fit-one-line? [nodes line-width]
   {:pre [(number? line-width)]}
   (loop [[x & xs :as nodes] (seq nodes)

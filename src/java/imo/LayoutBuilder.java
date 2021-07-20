@@ -1,11 +1,9 @@
 package imo;
 
-import clojure.lang.Cons;
-import clojure.lang.ISeq;
-import clojure.lang.ITransientCollection;
-import clojure.lang.PersistentVector;
+import clojure.lang.*;
 
 public class LayoutBuilder {
+  public final PersistentVector suffix;
   public final long targetWidth;
   public final long alternative;
   public ITransientCollection contents;
@@ -15,14 +13,15 @@ public class LayoutBuilder {
   public long relativeWidth;
   public long lineBreaks;
 
-  public LayoutBuilder(long startOffset, long targetWidth, long alternative) {
+  public LayoutBuilder(long startOffset, long targetWidth, long alternative, PersistentVector prefix, PersistentVector suffix) {
     this.offset = startOffset;
     this.targetWidth = targetWidth;
     this.alternative = alternative;
-    this.contents = PersistentVector.EMPTY.asTransient();
+    this.contents = (prefix != null ? prefix : PersistentVector.EMPTY).asTransient();
     this.aligns = new Cons(startOffset, null);
     this.relativeOffset = 0;
     this.relativeWidth = 0;
+    this.suffix = suffix;
   }
 
   public void setOffset(long offset) {
@@ -48,5 +47,17 @@ public class LayoutBuilder {
 
   public void dealign() {
     this.aligns = this.aligns.next();
+  }
+
+  public IPersistentCollection persistent() {
+    ITransientCollection xs = contents;
+    if (suffix != null) {
+      PersistentVector s = suffix;
+      int n = s.count();
+      for (int i = 0; i < n; i++) {
+        xs = xs.conj(s.get(i));
+      }
+    }
+    return xs.persistent();
   }
 }

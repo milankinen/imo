@@ -1,18 +1,15 @@
 (ns imo.formatter.meta-formatter
-  (:require [imo.layout :as l]
+  (:require [imo.layout.core :as l]
             [imo.util :refer [begin-chars]]
-            [imo.formatter.core :refer [format-node]]))
-
-(defn format-meta-wrapper [[_ inner-node] offset target-width alternative ^String begin-chars]
-  (when-let [inner (format-node inner-node (+ (.length begin-chars) offset) target-width alternative)]
-    (l/create [begin-chars inner])))
-
+            [imo.formatter.core :refer [format-inner-node]]))
 
 (doseq [node-type [:meta :quote :syntax-quote :var-quote :unquote :unquote-splice :deref]
         :let [chars (begin-chars node-type)]]
   (assert chars (str "No begin chars for " node-type))
-  (defmethod format-node node-type [node offset target-width alternative]
-    (format-meta-wrapper node offset target-width alternative chars)))
+  (defmethod format-inner-node node-type [[_ inner-node] offset target-width alternative]
+    ;; TODO is format-inner-node kosher here?
+    (when-let [inner (format-inner-node inner-node (+ (.length ^String chars) offset) target-width alternative)]
+      (l/create [chars inner]))))
 
 
 (comment
